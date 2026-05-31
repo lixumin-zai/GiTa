@@ -61,7 +61,7 @@ final class FretboardViewModel {
                     self.connectionStatusText = "等待连接..."
                     self.stopHeartbeat()
                     self.stopTimeoutTimer()
-                case .failed(let msg):
+                case .failed:
                     self.isConnected = false
                     self.connectionStatusText = "连接失败"
                     self.stopHeartbeat()
@@ -78,10 +78,7 @@ final class FretboardViewModel {
         // 有新连接进来时（iPad 连入）
         advertiser.onConnectionReceived = { [weak self] conn in
             guard let self else { return }
-            if self.isConnected || self.connection.state == .connecting {
-                print("[FretboardViewModel] Already connected or connecting, ignoring duplicate request")
-                return
-            }
+            print("[FretboardViewModel] Received incoming connection request. Accepting and resetting any previous session...")
             self.connection.accept(conn)
         }
 

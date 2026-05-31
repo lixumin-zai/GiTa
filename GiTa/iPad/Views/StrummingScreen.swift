@@ -78,55 +78,68 @@ struct StrummingScreen: View {
     // MARK: - 左面板
 
     private var leftPanel: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
             Spacer()
 
-            // 音孔装饰
-            SoundHoleView(isPlaying: viewModel.isConnected)
-                .scaleEffect(0.9)
+            // 🚀 稳定区域：音孔与和弦图示，保持居中不动
+            VStack(spacing: 24) {
+                SoundHoleView(isPlaying: viewModel.isConnected)
+                    .scaleEffect(0.9)
 
-            // 和弦图示
-            ChordDiagramView(fretState: viewModel.fretState)
+                ChordDiagramView(fretState: viewModel.fretState)
+            }
 
-            // 连接状态
-            connectionCard
-            
-            // 发现的设备列表
-            if !viewModel.isConnected && !viewModel.discoveredDevices.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("发现的指板设备：")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white.opacity(0.6))
-                    
-                    ForEach(viewModel.discoveredDevices) { device in
-                        Button {
-                            viewModel.connectTo(device: device)
-                        } label: {
-                            HStack {
-                                Image(systemName: "iphone")
-                                Text(device.name)
-                                    .font(.system(size: 14))
-                                Spacer()
-                                Text("点击连接")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.cyan)
+            Spacer()
+
+            // 🚀 动态连接区域：固定容器高度，彻底解决由于设备列表显示/隐藏导致的布局上下抖动跳跃问题
+            VStack(spacing: 12) {
+                connectionCard
+                
+                // 发现的设备列表与提示区域（固定高度，支持设备显示）
+                Group {
+                    if !viewModel.isConnected && !viewModel.discoveredDevices.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("发现的指板设备：")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white.opacity(0.6))
+                            
+                            ForEach(viewModel.discoveredDevices) { device in
+                                Button {
+                                    viewModel.connectTo(device: device)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "iphone")
+                                        Text(device.name)
+                                            .font(.system(size: 13))
+                                        Spacer()
+                                        Text("点击连接")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.cyan)
+                                    }
+                                    .padding(8)
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .foregroundColor(.white)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .padding(10)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .foregroundColor(.white)
                         }
-                        .buttonStyle(.plain)
+                    } else if !viewModel.isConnected {
+                        // 没有找到设备时显示提示
+                        Text(viewModel.connectionStatusText == "连接已断开" ? "请点击右上角“重新搜索”开始连接" : "等待局域网权限或正在搜索...")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.4))
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 4)
+                    } else {
+                        // 已连接状态，留出空白占位保持布局稳定
+                        Color.clear.frame(height: 1)
                     }
                 }
-                .padding(.top, 10)
-            } else if !viewModel.isConnected {
-                // 没有找到设备时显示提示
-                Text(viewModel.connectionStatusText == "连接已断开" ? "请点击右上角“重新搜索”开始连接" : "等待局域网权限或正在搜索...")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.4))
-                    .padding(.top, 10)
+                .frame(height: 80, alignment: .top) // 固定提示与列表高度为 80pt
             }
+            .frame(height: 150, alignment: .top) // 整个连接卡片区固定 150pt
+            .padding(.horizontal, 4)
 
             Spacer()
         }

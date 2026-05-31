@@ -65,6 +65,7 @@ final class PeerConnection: @unchecked Sendable {
 
     /// 断开连接
     func disconnect() {
+        connection?.stateUpdateHandler = nil
         connection?.cancel()
         connection = nil
         state = .disconnected
@@ -74,6 +75,7 @@ final class PeerConnection: @unchecked Sendable {
 
     private func setupConnection(_ conn: NWConnection) {
         // 取消旧连接
+        connection?.stateUpdateHandler = nil
         connection?.cancel()
 
         connection = conn

@@ -152,15 +152,15 @@ final class StrummingViewModel {
         stopPingTimer()
         browser.stopBrowsing()
         
-        // 2. 延迟 50 毫秒断开本地 Socket，以保证 UDP 断开数据包能够顺利飞出网卡
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self else { return }
-            self.connection.disconnect()
-            DispatchQueue.main.async {
-                self.isConnected = false
-                self.connectionStatusText = "连接已断开"
-                self.discoveredDevices.removeAll()
-            }
+        // 🚀 核心修复：立即、同步更新所有 UI 状态属性，绝对不放在异步延时里，彻底根除重新搜索时的竞态条件 (Race Condition)
+        self.isConnected = false
+        self.connectionStatusText = "连接已断开"
+        self.discoveredDevices.removeAll()
+        
+        // 2. 仅仅将底层的 Socket 关闭操作延迟 50ms 放在后台，以保证 UDP 断开数据包能够顺利飞出网卡
+        let activeConnection = self.connection
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.05) {
+            activeConnection.disconnect()
         }
     }
 
