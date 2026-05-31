@@ -136,7 +136,7 @@ struct StrummingScreen: View {
                         Color.clear.frame(height: 1)
                     }
                 }
-                .frame(height: 80, alignment: .top) // 固定提示与列表高度为 80pt
+                .frame(height: 86, alignment: .top) // 固定提示与列表高度为 86pt
             }
             .frame(height: 150, alignment: .top) // 整个连接卡片区固定 150pt
             .padding(.horizontal, 4)
@@ -162,11 +162,11 @@ struct StrummingScreen: View {
                     .foregroundColor(.white.opacity(0.9))
                     .id("conn_status_\(viewModel.connectionStatusText)")
 
-                if viewModel.isConnected && !viewModel.connectedDeviceName.isEmpty {
-                    Text(viewModel.connectedDeviceName)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.5))
-                }
+                // 🚀 保持高度恒定：即使未连接，也渲染一个固定高度占位，彻底消除上下撑开布局的抖动！
+                Text(viewModel.isConnected ? viewModel.connectedDeviceName : " ")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.5))
+                    .frame(height: 14)
             }
 
             Spacer()
@@ -178,8 +178,7 @@ struct StrummingScreen: View {
                     Text("断开")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.red.opacity(0.8))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .frame(width: 76, height: 22) // 🚀 固定宽高
                         .background(Color.red.opacity(0.15))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
@@ -191,8 +190,7 @@ struct StrummingScreen: View {
                     Text("重新搜索")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.cyan)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .frame(width: 76, height: 22) // 🚀 固定与 "断开" 相同的宽高
                         .background(Color.cyan.opacity(0.15))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
@@ -203,7 +201,8 @@ struct StrummingScreen: View {
                 .font(.system(size: 14))
                 .foregroundColor(viewModel.isConnected ? .green : .orange)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .frame(height: 52) // 🚀 固定整个卡片高度为 52pt
         .background(.ultraThinMaterial.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
