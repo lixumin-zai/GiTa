@@ -25,6 +25,7 @@ final class StringsStrumsView: UIView {
     private var touchStartString: [UITouch: Int] = [:]
     private var touchStartTime: [UITouch: TimeInterval] = [:]
     private var touchLastString: [UITouch: Int] = [:]
+    private var touchLastX: [UITouch: CGFloat] = [:]
 
     /// 显示链接（统一刷新振动动画）
     private var displayLink: CADisplayLink?
@@ -116,8 +117,9 @@ final class StringsStrumsView: UIView {
             touchStartString[touch] = string
             touchStartTime[touch] = touch.timestamp
             touchLastString[touch] = string
+            touchLastX[touch] = pos.x
 
-            // 立即触发拨弦
+            // 立即触发当前触摸位置最近弦的拨片
             triggerPluck(string)
         }
     }
@@ -125,13 +127,29 @@ final class StringsStrumsView: UIView {
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let pos = touch.location(in: self)
-            let currentString = nearestString(for: pos.x)
-
-            if let lastString = touchLastString[touch], currentString != lastString {
-                // 扫过了新的弦 → 触发拨弦
-                triggerPluck(currentString)
-                touchLastString[touch] = currentString
+            guard let lastX = touchLastX[touch] else {
+                touchLastX[touch] = pos.x
+                continue
             }
+
+            // 🚀 物理跨越检测：如果手指本次移动横穿了任何一根弦的实际 X 坐标，立即触发拨弦！
+            let minX = min(lastX, pos.x)
+            let maxX = max(lastX, pos.x)
+
+            for i in 0..<GuitarConstants.stringCount {
+                let xCoord = stringX(i)
+                if xCoord >= minX && xCoord <= maxX {
+                    // 跨越了该弦的实际坐标 → 完美触发拨片！
+                    triggerPluck(i)
+                }
+            }
+
+            // 更新上一次的 X 坐标
+            touchLastX[touch] = pos.x
+
+            // 保持对扫弦方向和范围的跟踪（用于 touchesEnded 判定扫弦）
+            let currentString = nearestString(for: pos.x)
+            touchLastString[touch] = currentString
         }
     }
 
@@ -150,6 +168,7 @@ final class StringsStrumsView: UIView {
             touchStartString.removeValue(forKey: touch)
             touchStartTime.removeValue(forKey: touch)
             touchLastString.removeValue(forKey: touch)
+            touchLastX.removeValue(forKey: touch)
         }
     }
 
