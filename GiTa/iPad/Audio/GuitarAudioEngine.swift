@@ -1,32 +1,37 @@
 import AVFoundation
 
-/// 6 弦吉他音频引擎
-/// 管理 6 个独立的 StringSynthesizer + 效果链
+/// 6 弦吉他音频引擎 (SF2 SoundFont 采样版)
+/// 使用 6 个独立的 AVAudioUnitSampler 节点来对应 6 根物理弦，模拟真实的吉他切音/余音特性，同时通过汇聚 Mixer 节点的 Tap 进行响度测算
 final class GuitarAudioEngine {
 
     // MARK: - 音频组件
 
     private let engine = AVAudioEngine()
-    private var sourceNode: AVAudioSourceNode?
-    private let strings: [StringSynthesizer]
+    private let samplers: [AVAudioUnitSampler]
+    private let samplerMixerNode = AVAudioMixerNode()
     private let effectsChain: EffectsChain
-
-    /// 混合缓冲区（预分配，避免实时线程分配）
-    private let mixBuffer: UnsafeMutablePointer<Float>
-    private let tempBuffer: UnsafeMutablePointer<Float>
-    private let maxFrames = 1024
 
     /// 音频采样率
     private let sampleRate: Double
 
-    /// 指向音量和响度的裸指针，彻底消除 Swift ARC 造成的实时音频线程开销和爆音/杂音/声音不对问题
+    /// 每一根弦最后一次播放的 MIDI 音符，用于重复拨弦时精准断音
+    private var lastMidiNotes: [UInt8?] = Array(repeating: nil, count: GuitarConstants.stringCount)
+
+    /// 6 根琴弦对应的开弦 MIDI 音符 (E2, A2, D3, G3, B3, E4)
+    private let openStringMidiNotes: [Int] = [40, 45, 50, 55, 59, 64]
+
+    /// 指向音量和响度的裸指针，彻底消除 Swift ARC 造成的实时音频线程开销，并与视图状态和定时器无缝兼容
     private let volumePointer: UnsafeMutablePointer<Float>
     private let loudnessPointer: UnsafeMutablePointer<Float>
 
     /// 主音量 (0.0 ~ 1.0)
     var volume: Float {
         get { volumePointer.pointee }
-        set { volumePointer.pointee = newValue }
+        set {
+            volumePointer.pointee = newValue
+            // 同步调整 AVAudioEngine 主混音器的输出音量
+            engine.mainMixerNode.outputVolume = newValue
+        }
     }
 
     /// 实时声音响度 (0.0 ~ 1.0)
@@ -46,38 +51,32 @@ final class GuitarAudioEngine {
             : 48000
         sampleRate = sr
 
-        // 创建 6 个弦合成器
-        strings = (0..<GuitarConstants.stringCount).map { _ in
-            StringSynthesizer(sampleRate: sr)
+        // 创建 6 个采样器（对应 6 根弦）
+        samplers = (0..<GuitarConstants.stringCount).map { _ in
+            AVAudioUnitSampler()
         }
 
         // 创建效果链
         effectsChain = EffectsChain()
 
-        // 预分配缓冲区
-        mixBuffer = UnsafeMutablePointer<Float>.allocate(capacity: maxFrames)
-        mixBuffer.initialize(repeating: 0, count: maxFrames)
-        tempBuffer = UnsafeMutablePointer<Float>.allocate(capacity: maxFrames)
-        tempBuffer.initialize(repeating: 0, count: maxFrames)
-
-        // 初始化裸指针，供实时音频线程安全、零锁、无 ARC 访问
+        // 初始化裸指针，供实时音频处理和外部定时器安全、零锁、无 ARC 访问
         volumePointer = UnsafeMutablePointer<Float>.allocate(capacity: 1)
         volumePointer.initialize(to: 0.8)
 
         loudnessPointer = UnsafeMutablePointer<Float>.allocate(capacity: 1)
         loudnessPointer.initialize(to: 0.0)
 
-        // sourceNode 先置为 nil（由 setupEngine 赋值）
-        sourceNode = nil
-
         setupAudioSession()
         setupEngine()
+
+        // 异步加载默认的原声木吉他音色，防止任何可能的主线程冷启动卡顿
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            self?.loadGuitarPreset(type: .acoustic)
+        }
     }
 
     deinit {
         engine.stop()
-        mixBuffer.deallocate()
-        tempBuffer.deallocate()
         volumePointer.deallocate()
         loudnessPointer.deallocate()
     }
@@ -100,71 +99,94 @@ final class GuitarAudioEngine {
     // MARK: - 引擎设置
 
     private func setupEngine() {
-        let localStrings = strings
-        let localMixBuf = mixBuffer
-        let localTempBuf = tempBuffer
-        let localMaxFrames = maxFrames
-        
-        let localVolumePtr = volumePointer
-        let localLoudnessPtr = loudnessPointer
-
-        // 创建源节点（实时音频回调）
-        // 🚀 不捕获 self，消除任何 Swift ARC 的 retain/release，确保极度纯净低延迟的音频渲染
-        let node = AVAudioSourceNode { _, _, frameCount, bufferList -> OSStatus in
-            let ablPointer = UnsafeMutableAudioBufferListPointer(bufferList)
-            let frames = Int(frameCount)
-            let vol = localVolumePtr.pointee
-
-            // 清空混合缓冲区
-            for i in 0..<min(frames, localMaxFrames) {
-                localMixBuf[i] = 0
-            }
-
-            // 渲染每根弦并混合
-            for string in localStrings {
-                if string.isActive {
-                    string.render(frameCount: min(frames, localMaxFrames), output: localTempBuf)
-                    for i in 0..<min(frames, localMaxFrames) {
-                        localMixBuf[i] += localTempBuf[i]
-                    }
-                }
-            }
-
-            // 写入输出缓冲区（所有声道）
-            var maxAmp: Float = 0.0
-            for buffer in ablPointer {
-                guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-                for i in 0..<min(frames, Int(buffer.mDataByteSize) / MemoryLayout<Float>.size) {
-                    // 混音后的信号 × 主音量，并做简单软限幅
-                    let sample = localMixBuf[i] * vol
-                    let absSample = abs(sample)
-                    if absSample > maxAmp {
-                        maxAmp = absSample
-                    }
-                    data[i] = max(-1.0, min(1.0, sample))
-                }
-            }
-
-            let current = localLoudnessPtr.pointee
-            localLoudnessPtr.pointee = max(maxAmp, current * 0.9)
-
-            return noErr
+        // 1. 挂载 6 个琴弦采样器节点和琴弦混音器节点
+        engine.attach(samplerMixerNode)
+        for sampler in samplers {
+            engine.attach(sampler)
         }
-        sourceNode = node
 
-        // 组装信号链：源节点 → 效果链 → 输出
-        engine.attach(node)
+        // 2. 挂载效果链节点
         effectsChain.attach(to: engine)
 
-        // 创建标准音频格式
+        // 创建立体声音频格式
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
 
-        // 源节点 → 效果链入口
-        engine.connect(node, to: effectsChain.inputNode, format: format)
+        // 3. 将每个采样器连接至琴弦混音器
+        for sampler in samplers {
+            engine.connect(sampler, to: samplerMixerNode, format: format)
+        }
 
-        // 效果链出口 → 主输出
+        // 4. 组装信号流：琴弦混音器 -> 效果链入口 (EQ) -> 混响 -> 主混音节点 -> 输出
+        engine.connect(samplerMixerNode, to: effectsChain.inputNode, format: format)
         effectsChain.connect(to: engine.mainMixerNode, format: format)
         engine.connect(engine.mainMixerNode, to: engine.outputNode, format: format)
+
+        // 5. 初始化主混音节点音量
+        engine.mainMixerNode.outputVolume = volumePointer.pointee
+
+        // 6. 安装音频 Tap 测算混音响度，反馈给 UI 作为律动特效
+        setupLoudnessTap()
+    }
+
+    // MARK: - 响度测算 Tap
+
+    private func setupLoudnessTap() {
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        let localLoudnessPtr = loudnessPointer
+
+        // 在 samplerMixerNode 的输出上挂载 Tap (256 帧极高响应率)
+        samplerMixerNode.installTap(onBus: 0, bufferSize: 256, format: format) { buffer, _ in
+            guard let channelData = buffer.floatChannelData?[0] else { return }
+            let frameCount = Int(buffer.frameLength)
+
+            var maxAmp: Float = 0.0
+            for i in 0..<frameCount {
+                let sample = abs(channelData[i])
+                if sample > maxAmp {
+                    maxAmp = sample
+                }
+            }
+
+            // 动态追踪绝对值峰值，并做 10% 的指数滤波平滑衰减，保持律动动画自然顺滑
+            let current = localLoudnessPtr.pointee
+            localLoudnessPtr.pointee = max(maxAmp, current * 0.9)
+        }
+    }
+
+    // MARK: - SoundFont 加载
+
+    /// 根据吉他类型加载对应的 SoundFont Instrument 预设
+    private func loadGuitarPreset(type: GuitarType) {
+        let program: UInt8
+        switch type {
+        case .acoustic:
+            program = 25 // General MIDI #26: Acoustic Guitar (steel)
+        case .classical:
+            program = 24 // General MIDI #25: Acoustic Guitar (nylon)
+        case .electric:
+            program = 27 // General MIDI #28: Electric Guitar (clean)
+        }
+
+        // 获取 bundle 中的 SoundFont 路径
+        guard let sf2URL = Bundle.main.url(forResource: "GeneralUserGS", withExtension: "sf2") else {
+            print("[GuitarAudioEngine] Error: SoundFont file 'GeneralUserGS.sf2' not found in Bundle!")
+            return
+        }
+
+        // 加载乐器到 6 个独立采样器中。Apple 系统底层会自动对同 URL 的采样样本数据进行内存共享
+        for i in 0..<GuitarConstants.stringCount {
+            do {
+                try samplers[i].loadSoundBankInstrument(
+                    at: sf2URL,
+                    program: program,
+                    bankMSB: 121, // GM 旋律默认 MSB
+                    bankLSB: 0
+                )
+                print("[GuitarAudioEngine] Successfully loaded string \(i) preset \(type.rawValue) (program: \(program))")
+            } catch {
+                print("[GuitarAudioEngine] Failed to load instrument on string \(i): \(error)")
+            }
+        }
     }
 
     // MARK: - 启动/停止
@@ -193,32 +215,47 @@ final class GuitarAudioEngine {
 
     /// 拨单弦
     /// - Parameters:
-    ///   - stringIndex: 弦索引 (0=6弦, 5=1弦)
+    ///   - stringIndex: 弦索引 (0=6弦/低E, 5=1弦/高E)
     ///   - amplitude: 力度 (0.0 ~ 1.0)
-    func pluckString(_ stringIndex: Int, amplitude: Float = 0.8) {
+    ///   - pickPosition: 拨弦位置 (采样器不使用，但为了兼容旧接口必须保留)
+    func pluckString(_ stringIndex: Int, amplitude: Float = 0.8, pickPosition: Float = 0.13) {
         guard stringIndex >= 0, stringIndex < GuitarConstants.stringCount else { return }
-        let freq = currentFretState.frequency(for: stringIndex)
-        strings[stringIndex].pluck(frequency: freq, amplitude: amplitude)
+
+        // 1. 计算当前的 MIDI 音符号
+        let fret = currentFretState.fret(for: stringIndex)
+        let midiNote = openStringMidiNotes[stringIndex] + fret
+
+        // 2. 将力度大小转换为 MIDI 键盘的 Velocity (0 ~ 127)
+        let velocity = UInt8(max(0, min(127, Int(amplitude * 127.0))))
+
+        // 3. 🎸 物理断音：如果在该琴弦上有正在发声的音符，立刻停掉它以模拟物理重拨打断，实现极佳的琴弦断音体验
+        if let prevNote = lastMidiNotes[stringIndex] {
+            samplers[stringIndex].stopNote(prevNote, onChannel: 0)
+        }
+
+        // 4. 发送 MIDI Note On 事件触发采样回放
+        samplers[stringIndex].startNote(UInt8(midiNote), withVelocity: velocity, onChannel: 0)
+        lastMidiNotes[stringIndex] = UInt8(midiNote)
     }
 
     /// 扫弦
     /// - Parameters:
     ///   - fromString: 起始弦
     ///   - toString: 结束弦
-    ///   - velocity: 扫弦速度 (影响间隔时间和力度)
+    ///   - velocity: 扫弦速度 (影响间隔时间)
     ///   - amplitude: 基础力度
     func strum(from fromString: Int, to toString: Int, velocity: Double = 1.0, amplitude: Float = 0.7) {
         let start = min(fromString, toString)
         let end = max(fromString, toString)
         let direction = fromString < toString ? 1 : -1
 
-        // 扫弦间隔：速度越快，间隔越短（10ms ~ 50ms）
+        // 扫弦间隔：速度越快，各弦拨响的间隔越短（10ms ~ 50ms）
         let intervalMs = max(10, min(50, 30.0 / velocity))
 
         for i in 0...(end - start) {
             let stringIdx = direction > 0 ? start + i : end - i
             let delay = Double(i) * intervalMs / 1000.0
-            let amp = amplitude * Float.random(in: 0.85...1.0) // 轻微随机化
+            let amp = amplitude * Float.random(in: 0.85...1.0) // 动态微小随机化
 
             DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.pluckString(stringIdx, amplitude: amp)
@@ -228,8 +265,11 @@ final class GuitarAudioEngine {
 
     /// 静音所有弦
     func muteAll() {
-        for string in strings {
-            string.mute()
+        for i in 0..<GuitarConstants.stringCount {
+            if let prevNote = lastMidiNotes[i] {
+                samplers[i].stopNote(prevNote, onChannel: 0)
+                lastMidiNotes[i] = nil
+            }
         }
     }
 
@@ -240,9 +280,14 @@ final class GuitarAudioEngine {
         effectsChain.setReverbMix(amount)
     }
 
-    /// 设置吉他类型预设
+    /// 设置吉他类型并动态重载 SoundFont 音色 Program
     func setGuitarType(_ type: GuitarType) {
         effectsChain.applyPreset(type)
+        
+        // 动态加载对应音色 Preset，由于是后台执行且系统会自动缓存共享，切换体验极其丝滑
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            self?.loadGuitarPreset(type: type)
+        }
     }
 }
 

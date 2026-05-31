@@ -30,6 +30,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: lismin.gita
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: QTD33HXD54
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: false
         INFOPLIST_FILE: GiTa/Info.plist

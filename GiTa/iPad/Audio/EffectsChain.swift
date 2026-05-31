@@ -2,6 +2,7 @@ import AVFoundation
 
 /// 音频效果链：混响 + EQ
 /// 不同吉他类型有不同的效果预设
+/// 与琴体共振配合使用时，EQ 更多扮演"后期润色"角色
 final class EffectsChain {
 
     // MARK: - 效果节点
@@ -59,31 +60,32 @@ final class EffectsChain {
         applyAcousticPreset()
     }
 
-    /// 木吉他：温暖混响，中低频增强
+    /// 木吉他：温暖自然混响，琴体共振已提供大部分低频温暖度
+    /// EQ 主要做微调润色
     private func applyAcousticPreset() {
         reverb.loadFactoryPreset(.mediumHall)
-        reverb.wetDryMix = 20
+        reverb.wetDryMix = 15  // 适度混响，不掩盖琴体共振的自然感
 
-        // 低频增强（温暖感）
+        // 低频微增（补充琴体共振之外的温暖底噪）
         let band0 = eq.bands[0]
         band0.filterType = .lowShelf
-        band0.frequency = 200
-        band0.gain = 3.0
+        band0.frequency = 150
+        band0.gain = 2.0    // 轻微增强，琴体共振已覆盖主要低频
         band0.bypass = false
 
-        // 中频（清晰度）
+        // 中频：吉他的"木头"质感
         let band1 = eq.bands[1]
         band1.filterType = .parametric
-        band1.frequency = 1000
+        band1.frequency = 1200
         band1.bandwidth = 1.5
-        band1.gain = 1.0
+        band1.gain = 1.5    // 轻微提升中高频存在感
         band1.bypass = false
 
-        // 高频（明亮感）
+        // 高频：自然的高频滚降，消除合成器的金属光泽
         let band2 = eq.bands[2]
         band2.filterType = .highShelf
-        band2.frequency = 5000
-        band2.gain = 2.0
+        band2.frequency = 4500
+        band2.gain = -4.0   // 大幅衰减高频，让音色温暖柔和
         band2.bypass = false
     }
 
@@ -112,15 +114,15 @@ final class EffectsChain {
         band2.bypass = false
     }
 
-    /// 古典吉他：丰富混响，自然均衡
+    /// 古典吉他：丰富混响，自然均衡，更多琴体共振
     private func applyClassicalPreset() {
         reverb.loadFactoryPreset(.largeHall)
-        reverb.wetDryMix = 30
+        reverb.wetDryMix = 25  // 古典吉他需要更多厅堂感
 
         let band0 = eq.bands[0]
         band0.filterType = .lowShelf
-        band0.frequency = 250
-        band0.gain = 2.0
+        band0.frequency = 200
+        band0.gain = 2.5    // 古典吉他尼龙弦的温暖度
         band0.bypass = false
 
         let band1 = eq.bands[1]
@@ -130,10 +132,11 @@ final class EffectsChain {
         band1.gain = 1.5
         band1.bypass = false
 
+        // 古典吉他高频更暗，尼龙弦缺少金属光泽
         let band2 = eq.bands[2]
         band2.filterType = .highShelf
         band2.frequency = 4000
-        band2.gain = -1.0
+        band2.gain = -3.0   // 更多高频衰减
         band2.bypass = false
     }
 }
