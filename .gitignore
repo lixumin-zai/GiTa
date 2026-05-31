@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+*.swp
+*.lock
+
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+*.xcworkspace
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# XcodeGen (Generated project, can be regenerated anytime)
+# If you prefer to keep the generated project, comment the line below:
+GiTa.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# User custom build folders
+build/
