@@ -19,11 +19,20 @@ final class GuitarAudioEngine {
     /// 音频采样率
     private let sampleRate: Double
 
+    /// 指向音量和响度的裸指针，彻底消除 Swift ARC 造成的实时音频线程开销和爆音/杂音/声音不对问题
+    private let volumePointer: UnsafeMutablePointer<Float>
+    private let loudnessPointer: UnsafeMutablePointer<Float>
+
     /// 主音量 (0.0 ~ 1.0)
-    var volume: Float = 0.8
+    var volume: Float {
+        get { volumePointer.pointee }
+        set { volumePointer.pointee = newValue }
+    }
 
     /// 实时声音响度 (0.0 ~ 1.0)
-    var currentLoudness: Float = 0.0
+    var currentLoudness: Float {
+        loudnessPointer.pointee
+    }
 
     /// 当前按弦状态（从网络接收）
     private(set) var currentFretState = FretState.empty
@@ -51,6 +60,13 @@ final class GuitarAudioEngine {
         tempBuffer = UnsafeMutablePointer<Float>.allocate(capacity: maxFrames)
         tempBuffer.initialize(repeating: 0, count: maxFrames)
 
+        // 初始化裸指针，供实时音频线程安全、零锁、无 ARC 访问
+        volumePointer = UnsafeMutablePointer<Float>.allocate(capacity: 1)
+        volumePointer.initialize(to: 0.8)
+
+        loudnessPointer = UnsafeMutablePointer<Float>.allocate(capacity: 1)
+        loudnessPointer.initialize(to: 0.0)
+
         // sourceNode 先置为 nil（由 setupEngine 赋值）
         sourceNode = nil
 
@@ -62,6 +78,8 @@ final class GuitarAudioEngine {
         engine.stop()
         mixBuffer.deallocate()
         tempBuffer.deallocate()
+        volumePointer.deallocate()
+        loudnessPointer.deallocate()
     }
 
     // MARK: - 音频会话配置
@@ -86,12 +104,16 @@ final class GuitarAudioEngine {
         let localMixBuf = mixBuffer
         let localTempBuf = tempBuffer
         let localMaxFrames = maxFrames
+        
+        let localVolumePtr = volumePointer
+        let localLoudnessPtr = loudnessPointer
 
         // 创建源节点（实时音频回调）
-        let node = AVAudioSourceNode { [weak self] _, _, frameCount, bufferList -> OSStatus in
+        // 🚀 不捕获 self，消除任何 Swift ARC 的 retain/release，确保极度纯净低延迟的音频渲染
+        let node = AVAudioSourceNode { _, _, frameCount, bufferList -> OSStatus in
             let ablPointer = UnsafeMutableAudioBufferListPointer(bufferList)
             let frames = Int(frameCount)
-            let vol = self?.volume ?? 0.8
+            let vol = localVolumePtr.pointee
 
             // 清空混合缓冲区
             for i in 0..<min(frames, localMaxFrames) {
@@ -123,10 +145,8 @@ final class GuitarAudioEngine {
                 }
             }
 
-            if let self = self {
-                let current = self.currentLoudness
-                self.currentLoudness = max(maxAmp, current * 0.9)
-            }
+            let current = localLoudnessPtr.pointee
+            localLoudnessPtr.pointee = max(maxAmp, current * 0.9)
 
             return noErr
         }
