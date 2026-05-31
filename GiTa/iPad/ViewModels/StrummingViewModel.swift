@@ -26,6 +26,9 @@ final class StrummingViewModel {
         didSet { audioEngine.setGuitarType(guitarType) }
     }
 
+    /// 实时声音响度 (0.0 ~ 1.0)
+    var loudness: Float = 0.0
+
     // MARK: - 私有
 
     let audioEngine = GuitarAudioEngine()
@@ -36,18 +39,21 @@ final class StrummingViewModel {
     private var lastReceivedTime = Date()
     private var timeoutTimer: Timer?
     private var pingTimer: Timer?
+    private var loudnessTimer: Timer?
 
     // MARK: - 生命周期
 
     init() {
         setupNetwork()
         audioEngine.start()
+        startLoudnessTimer()
     }
 
     deinit {
         handshakeTimer?.invalidate()
         timeoutTimer?.invalidate()
         pingTimer?.invalidate()
+        loudnessTimer?.invalidate()
         browser.stopBrowsing()
         connection.disconnect()
         audioEngine.stop()
@@ -287,5 +293,12 @@ final class StrummingViewModel {
     private func stopPingTimer() {
         pingTimer?.invalidate()
         pingTimer = nil
+    }
+
+    private func startLoudnessTimer() {
+        loudnessTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.loudness = self.audioEngine.currentLoudness
+        }
     }
 }

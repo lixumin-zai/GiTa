@@ -1,41 +1,94 @@
 import SwiftUI
 
-/// iPad 端主屏幕 — 拨弦 + 音箱
+/// iPad 端主屏幕 — 拨弦 + 音箱 (极奢横屏 ZStack 沉浸式悬浮布局)
 struct StrummingScreen: View {
 
     @State private var viewModel = StrummingViewModel()
 
     var body: some View {
         ZStack {
-            // 背景
+            // 1. 拟真深色花梨木纹理背景
             backgroundGradient
 
-            // 主内容
+            // 2. 🚀 背景音孔装饰：将旋转音孔作为精致的背景，正好置于中央琴弦下方，完美贴合真实吉他物理结构！
+            SoundHoleView(isPlaying: viewModel.isConnected)
+                .scaleEffect(1.4)
+                .opacity(0.12) // 低调且优雅地融入背景木纹
+                .offset(y: -10)
+
+            // 3. 🚀 核心主体：水平拨弦琴弦区 (占满全屏，占据绝对主体地位)
+            strummingArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // 4. 🚀 悬浮辅助控制系统 (玻璃层叠 ZStack)
             VStack(spacing: 0) {
-                // 主区域：左面板 + 右拨弦区
-                HStack(spacing: 0) {
-                    // 左面板
-                    leftPanel
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    // 分隔线
-                    Rectangle()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(width: 1)
-
-                    // 右侧拨弦区
-                    strummingArea
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // 顶部左右悬浮条：左边是连接卡片，右边是按弦和弦图
+                HStack(alignment: .top) {
+                    // 左上角：连接卡片及在其下方的设备列表
+                    VStack(alignment: .leading, spacing: 10) {
+                        connectionCard
+                            .frame(width: 240)
+                        
+                        // 🚀 补回被遗落的可用设备列表，支持点击连接
+                        if !viewModel.isConnected && !viewModel.discoveredDevices.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("发现的指板设备：")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.6))
+                                
+                                ForEach(viewModel.discoveredDevices) { device in
+                                    Button {
+                                        viewModel.connectTo(device: device)
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "iphone")
+                                                .foregroundColor(.cyan)
+                                            Text(device.name)
+                                                .font(.system(size: 12))
+                                            Spacer()
+                                            Text("连接")
+                                                .font(.system(size: 10, weight: .bold))
+                                                .foregroundColor(.cyan)
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.white.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .foregroundColor(.white)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(10)
+                            .background(.ultraThinMaterial.opacity(0.3))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .frame(width: 240)
+                            .shadow(color: .black.opacity(0.15), radius: 6)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // 右上角：和弦指法图 (辅助指引，小比例融合)
+                    ChordDiagramView(fretState: viewModel.fretState)
+                        .scaleEffect(0.9)
+                        .shadow(color: .black.opacity(0.2), radius: 8)
                 }
+                .padding(.horizontal, 40)
+                .padding(.top, 36) // 适应全面屏顶部安全区与物理圆角
 
-                // 底部控制栏
+                Spacer()
+
+                // 底部悬浮条：音量与混响效果毛玻璃控制栏
                 ControlBarView(
                     volume: $viewModel.volume,
                     reverbAmount: $viewModel.reverbAmount,
-                    guitarType: $viewModel.guitarType
+                    guitarType: $viewModel.guitarType,
+                    loudness: viewModel.loudness
                 )
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 36) // 适应全面屏底部安全区与物理圆角
             }
         }
         .statusBarHidden()
@@ -73,77 +126,6 @@ struct StrummingScreen: View {
             }
             .ignoresSafeArea()
         }
-    }
-
-    // MARK: - 左面板
-
-    private var leftPanel: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            // 🚀 稳定区域：音孔与和弦图示，保持居中不动
-            VStack(spacing: 24) {
-                SoundHoleView(isPlaying: viewModel.isConnected)
-                    .scaleEffect(0.9)
-
-                ChordDiagramView(fretState: viewModel.fretState)
-            }
-
-            Spacer()
-
-            // 🚀 动态连接区域：固定容器高度，彻底解决由于设备列表显示/隐藏导致的布局上下抖动跳跃问题
-            VStack(spacing: 12) {
-                connectionCard
-                
-                // 发现的设备列表与提示区域（固定高度，支持设备显示）
-                Group {
-                    if !viewModel.isConnected && !viewModel.discoveredDevices.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("发现的指板设备：")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.white.opacity(0.6))
-                            
-                            ForEach(viewModel.discoveredDevices) { device in
-                                Button {
-                                    viewModel.connectTo(device: device)
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "iphone")
-                                        Text(device.name)
-                                            .font(.system(size: 13))
-                                        Spacer()
-                                        Text("点击连接")
-                                            .font(.system(size: 10, weight: .bold))
-                                            .foregroundColor(.cyan)
-                                    }
-                                    .padding(8)
-                                    .background(Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .foregroundColor(.white)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    } else if !viewModel.isConnected {
-                        // 没有找到设备时显示提示
-                        Text(viewModel.connectionStatusText == "连接已断开" ? "请点击右上角“重新搜索”开始连接" : "等待局域网权限或正在搜索...")
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.4))
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 4)
-                    } else {
-                        // 已连接状态，留出空白占位保持布局稳定
-                        Color.clear.frame(height: 1)
-                    }
-                }
-                .frame(height: 86, alignment: .top) // 固定提示与列表高度为 86pt
-            }
-            .frame(height: 150, alignment: .top) // 整个连接卡片区固定 150pt
-            .padding(.horizontal, 4)
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
     }
 
     // MARK: - 连接状态卡片
@@ -205,6 +187,7 @@ struct StrummingScreen: View {
         .frame(height: 52) // 🚀 固定整个卡片高度为 52pt
         .background(.ultraThinMaterial.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .shadow(color: .black.opacity(0.15), radius: 6)
     }
 
     // MARK: - 拨弦区域

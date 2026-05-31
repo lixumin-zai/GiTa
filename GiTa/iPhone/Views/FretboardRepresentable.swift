@@ -20,6 +20,6 @@ struct FretboardRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: FretboardView, context: Context) {
-        // 状态更新时可刷新 UI（当前由触控直接驱动）
+        uiView.updateScale(CGFloat(viewModel.scale))
     }
 }

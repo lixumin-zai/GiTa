@@ -25,7 +25,7 @@ final class StringsStrumsView: UIView {
     private var touchStartString: [UITouch: Int] = [:]
     private var touchStartTime: [UITouch: TimeInterval] = [:]
     private var touchLastString: [UITouch: Int] = [:]
-    private var touchLastX: [UITouch: CGFloat] = [:]
+    private var touchLastY: [UITouch: CGFloat] = [:]
 
     /// 显示链接（统一刷新振动动画）
     private var displayLink: CADisplayLink?
@@ -90,20 +90,22 @@ final class StringsStrumsView: UIView {
 
     // MARK: - 布局
 
-    /// 弦的 X 坐标
-    private func stringX(_ index: Int) -> CGFloat {
-        let margin: CGFloat = 30
-        let usableWidth = bounds.width - margin * 2
-        let spacing = usableWidth / CGFloat(GuitarConstants.stringCount - 1)
-        return margin + CGFloat(index) * spacing
+    /// 弦的 Y 坐标
+    private func stringY(_ index: Int) -> CGFloat {
+        let topMargin: CGFloat = 200
+        let bottomMargin: CGFloat = 200
+        let usableHeight = bounds.height - topMargin - bottomMargin
+        let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
+        return topMargin + CGFloat(index) * spacing
     }
 
-    /// 根据 X 坐标找到最近的弦
-    private func nearestString(for x: CGFloat) -> Int {
-        let margin: CGFloat = 30
-        let usableWidth = bounds.width - margin * 2
-        let spacing = usableWidth / CGFloat(GuitarConstants.stringCount - 1)
-        var index = Int(round((x - margin) / spacing))
+    /// 根据 Y 坐标找到最近的弦
+    private func nearestString(for y: CGFloat) -> Int {
+        let topMargin: CGFloat = 200
+        let bottomMargin: CGFloat = 200
+        let usableHeight = bounds.height - topMargin - bottomMargin
+        let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
+        var index = Int(round((y - topMargin) / spacing))
         index = max(0, min(index, GuitarConstants.stringCount - 1))
         return index
     }
@@ -113,11 +115,11 @@ final class StringsStrumsView: UIView {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let pos = touch.location(in: self)
-            let string = nearestString(for: pos.x)
+            let string = nearestString(for: pos.y)
             touchStartString[touch] = string
             touchStartTime[touch] = touch.timestamp
             touchLastString[touch] = string
-            touchLastX[touch] = pos.x
+            touchLastY[touch] = pos.y
 
             // 立即触发当前触摸位置最近弦的拨片
             triggerPluck(string)
@@ -127,28 +129,28 @@ final class StringsStrumsView: UIView {
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let pos = touch.location(in: self)
-            guard let lastX = touchLastX[touch] else {
-                touchLastX[touch] = pos.x
+            guard let lastY = touchLastY[touch] else {
+                touchLastY[touch] = pos.y
                 continue
             }
 
-            // 🚀 物理跨越检测：如果手指本次移动横穿了任何一根弦的实际 X 坐标，立即触发拨弦！
-            let minX = min(lastX, pos.x)
-            let maxX = max(lastX, pos.x)
+            // 🚀 物理跨越检测：如果手指本次移动横穿了任何一根弦的实际 Y 坐标，立即触发拨弦！
+            let minY = min(lastY, pos.y)
+            let maxY = max(lastY, pos.y)
 
             for i in 0..<GuitarConstants.stringCount {
-                let xCoord = stringX(i)
-                if xCoord >= minX && xCoord <= maxX {
+                let yCoord = stringY(i)
+                if yCoord >= minY && yCoord <= maxY {
                     // 跨越了该弦的实际坐标 → 完美触发拨片！
                     triggerPluck(i)
                 }
             }
 
-            // 更新上一次的 X 坐标
-            touchLastX[touch] = pos.x
+            // 更新上一次的 Y 坐标
+            touchLastY[touch] = pos.y
 
             // 保持对扫弦方向和范围的跟踪（用于 touchesEnded 判定扫弦）
-            let currentString = nearestString(for: pos.x)
+            let currentString = nearestString(for: pos.y)
             touchLastString[touch] = currentString
         }
     }
@@ -168,7 +170,7 @@ final class StringsStrumsView: UIView {
             touchStartString.removeValue(forKey: touch)
             touchStartTime.removeValue(forKey: touch)
             touchLastString.removeValue(forKey: touch)
-            touchLastX.removeValue(forKey: touch)
+            touchLastY.removeValue(forKey: touch)
         }
     }
 
@@ -193,66 +195,64 @@ final class StringsStrumsView: UIView {
     override func draw(_ rect: CGRect) {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
 
-        let topMargin: CGFloat = 50
-        let bottomMargin: CGFloat = 95
-        let stringTop = topMargin
-        let stringBottom = bounds.height - bottomMargin
+        let leftMargin: CGFloat = 60
+        let rightMargin: CGFloat = bounds.width - 60
 
         for i in 0..<GuitarConstants.stringCount {
-            let x = stringX(i)
+            let y = stringY(i)
             let color = stringColors[i]
             let width = stringWidths[i]
             let amplitude = stringVibrationAmplitudes[i]
             let phase = stringVibrationPhases[i]
 
             if amplitude > 0.1 {
-                // 振动中：画正弦波形弦
-                drawVibratingString(ctx, x: x, top: stringTop, bottom: stringBottom,
+                // 振动中：画水平正弦波形弦
+                drawVibratingString(ctx, y: y, left: leftMargin, right: rightMargin,
                                     color: color, width: width,
                                     amplitude: amplitude, phase: phase)
             } else {
-                // 静止：画直线弦
-                drawStaticString(ctx, x: x, top: stringTop, bottom: stringBottom,
+                // 静止：画水平直线弦
+                drawStaticString(ctx, y: y, left: leftMargin, right: rightMargin,
                                  color: color, width: width)
             }
 
-            // 弦顶部音名标签
-            drawStringLabel(ctx, index: i, x: x, y: stringTop - 25)
+            // 弦左侧开弦音名标签
+            drawStringLabel(ctx, index: i, x: leftMargin - 25, y: y)
 
-            // 弦底部当前音名
-            drawCurrentNote(ctx, index: i, x: x, y: stringBottom + 15)
+            // 弦右侧当前发声音名
+            drawCurrentNote(ctx, index: i, x: rightMargin + 15, y: y)
         }
     }
 
-    private func drawStaticString(_ ctx: CGContext, x: CGFloat, top: CGFloat, bottom: CGFloat,
+    private func drawStaticString(_ ctx: CGContext, y: CGFloat, left: CGFloat, right: CGFloat,
                                    color: UIColor, width: CGFloat) {
         // 发光效果
         ctx.saveGState()
         ctx.setShadow(offset: .zero, blur: 6, color: color.withAlphaComponent(0.4).cgColor)
         ctx.setStrokeColor(color.cgColor)
         ctx.setLineWidth(width)
-        ctx.move(to: CGPoint(x: x, y: top))
-        ctx.addLine(to: CGPoint(x: x, y: bottom))
+        ctx.move(to: CGPoint(x: left, y: y))
+        ctx.addLine(to: CGPoint(x: right, y: y))
         ctx.strokePath()
         ctx.restoreGState()
     }
 
-    private func drawVibratingString(_ ctx: CGContext, x: CGFloat, top: CGFloat, bottom: CGFloat,
+    private func drawVibratingString(_ ctx: CGContext, y: CGFloat, left: CGFloat, right: CGFloat,
                                       color: UIColor, width: CGFloat,
                                       amplitude: CGFloat, phase: CGFloat) {
         let path = CGMutablePath()
-        let length = bottom - top
+        let length = right - left
         let segments = 50
 
-        path.move(to: CGPoint(x: x, y: top))
+        path.move(to: CGPoint(x: left, y: y))
 
         for s in 1...segments {
             let t = CGFloat(s) / CGFloat(segments)
-            let y = top + t * length
+            let x = left + t * length
             // 两端固定，中间最大振幅的正弦包络
             let envelope = sin(.pi * t)
             let vibration = sin(phase + t * .pi * 6) * amplitude * envelope
-            path.addLine(to: CGPoint(x: x + vibration, y: y))
+            path.addLine(to: CGPoint(x: x, y: y + vibration))
         }
 
         // 发光效果
@@ -273,19 +273,19 @@ final class StringsStrumsView: UIView {
         ]
         let nsString = name as NSString
         let size = nsString.size(withAttributes: attributes)
-        nsString.draw(at: CGPoint(x: x - size.width / 2, y: y), withAttributes: attributes)
+        nsString.draw(at: CGPoint(x: x - size.width / 2, y: y - size.height / 2), withAttributes: attributes)
     }
 
     private func drawCurrentNote(_ ctx: CGContext, index: Int, x: CGFloat, y: CGFloat) {
         guard index < currentNotes.count else { return }
         let name = currentNotes[index]
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 12, weight: .medium),
-            .foregroundColor: UIColor.white.withAlphaComponent(0.7)
+            .font: UIFont.systemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: UIColor.white.withAlphaComponent(0.8)
         ]
         let nsString = name as NSString
         let size = nsString.size(withAttributes: attributes)
-        nsString.draw(at: CGPoint(x: x - size.width / 2, y: y), withAttributes: attributes)
+        nsString.draw(at: CGPoint(x: x - size.width / 2, y: y - size.height / 2), withAttributes: attributes)
     }
 
     /// 更新当前音名显示

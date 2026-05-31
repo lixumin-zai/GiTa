@@ -16,6 +16,9 @@ final class FretboardViewModel {
     /// 连接状态文字
     var connectionStatusText = "等待连接..."
 
+    /// 指板大小缩放比例 (0.8 ~ 1.2)
+    var scale: Double = 1.0
+
     // MARK: - 私有
 
     private let advertiser = ServiceAdvertiser()

@@ -22,6 +22,9 @@ final class GuitarAudioEngine {
     /// 主音量 (0.0 ~ 1.0)
     var volume: Float = 0.8
 
+    /// 实时声音响度 (0.0 ~ 1.0)
+    var currentLoudness: Float = 0.0
+
     /// 当前按弦状态（从网络接收）
     private(set) var currentFretState = FretState.empty
 
@@ -106,13 +109,23 @@ final class GuitarAudioEngine {
             }
 
             // 写入输出缓冲区（所有声道）
+            var maxAmp: Float = 0.0
             for buffer in ablPointer {
                 guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
                 for i in 0..<min(frames, Int(buffer.mDataByteSize) / MemoryLayout<Float>.size) {
                     // 混音后的信号 × 主音量，并做简单软限幅
                     let sample = localMixBuf[i] * vol
+                    let absSample = abs(sample)
+                    if absSample > maxAmp {
+                        maxAmp = absSample
+                    }
                     data[i] = max(-1.0, min(1.0, sample))
                 }
+            }
+
+            if let self = self {
+                let current = self.currentLoudness
+                self.currentLoudness = max(maxAmp, current * 0.9)
             }
 
             return noErr

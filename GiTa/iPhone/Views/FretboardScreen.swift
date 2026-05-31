@@ -4,6 +4,7 @@ import SwiftUI
 struct FretboardScreen: View {
 
     @State private var viewModel = FretboardViewModel()
+    @State private var showSettings = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -24,6 +25,63 @@ struct FretboardScreen: View {
                         .padding(.top, max(12, geometry.safeAreaInsets.top))
                     }
                     Spacer()
+                }
+
+                // 悬浮设置齿轮按钮 (位于连接状态徽章下方)
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                showSettings.toggle()
+                            }
+                        } label: {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white.opacity(0.85))
+                                .padding(8)
+                                .background(.ultraThinMaterial.opacity(0.65))
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.15), radius: 3)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, max(16, geometry.safeAreaInsets.trailing))
+                        .padding(.top, max(52, geometry.safeAreaInsets.top + 40))
+                    }
+                    Spacer()
+                }
+
+                // 指板缩放控制面板 (顶部中央悬浮，带毛玻璃与弹簧动画)
+                if showSettings {
+                    VStack {
+                        HStack(spacing: 12) {
+                            Image(systemName: "hand.point.up.left.and.text.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.cyan)
+
+                            Text("指板缩放")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white.opacity(0.7))
+
+                            Slider(value: $viewModel.scale, in: 0.8...1.2)
+                                .tint(.cyan)
+                                .frame(width: 130)
+
+                            Text("\(Int(viewModel.scale * 100))%")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundColor(.cyan)
+                                .frame(width: 35, alignment: .trailing)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial.opacity(0.88))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                        .padding(.top, max(12, geometry.safeAreaInsets.top))
+                        .transition(.move(edge: .top).combined(with: .opacity))
+
+                        Spacer()
+                    }
                 }
 
                 // 当前按弦信息（左下角，自适应安全区，防圆角/扬声器开孔遮挡）

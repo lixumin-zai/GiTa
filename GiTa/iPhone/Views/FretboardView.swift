@@ -20,6 +20,17 @@ final class FretboardView: UIView {
     /// 每根弦当前按下的品位（用于绘制指示器）
     private var pressedFrets: [Int: Int] = [:] // [弦索引: 品位]
 
+    /// 指板尺寸缩放比例 (0.8 ~ 1.2)
+    private var fretboardScale: CGFloat = 1.0
+
+    // MARK: - 控制
+
+    func updateScale(_ scale: CGFloat) {
+        guard fretboardScale != scale else { return }
+        fretboardScale = scale
+        setNeedsDisplay()
+    }
+
     // MARK: - 外观常量
 
     /// 弦的颜色（从 6 弦到 1 弦，由金铜渐变到银白）
@@ -85,9 +96,10 @@ final class FretboardView: UIView {
     private func stringY(_ index: Int) -> CGFloat {
         let topMargin: CGFloat = 50
         let bottomMargin: CGFloat = 50
-        let usableHeight = bounds.height - topMargin - bottomMargin
+        let usableHeight = (bounds.height - topMargin - bottomMargin) * fretboardScale
+        let yStart = topMargin + (bounds.height - topMargin - bottomMargin) * (1 - fretboardScale) / 2
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
-        return topMargin + CGFloat(index) * spacing
+        return yStart + CGFloat(index) * spacing
     }
 
     /// 品丝的 X 坐标
@@ -95,20 +107,22 @@ final class FretboardView: UIView {
         let leftMargin: CGFloat = 70
         let rightMargin: CGFloat = 70
         let nutWidth: CGFloat = 12 // 琴枕宽度
-        let usableWidth = bounds.width - leftMargin - rightMargin - nutWidth
+        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale
+        let xStart = leftMargin + (bounds.width - leftMargin - rightMargin - nutWidth) * (1 - fretboardScale) / 2
         let position = stretchedFretPosition(fret)
-        return leftMargin + nutWidth + position * usableWidth
+        return xStart + nutWidth + position * usableWidth
     }
 
     /// 品位中心 X 坐标
     private func fretCenterX(_ fret: Int) -> CGFloat {
         let leftMargin: CGFloat = 70
         let rightMargin: CGFloat = 70
-        if fret == 0 { return leftMargin / 2 } // 琴枕前方（空弦区中心）
         let nutWidth: CGFloat = 12
-        let usableWidth = bounds.width - leftMargin - rightMargin - nutWidth
+        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale
+        let xStart = leftMargin + (bounds.width - leftMargin - rightMargin - nutWidth) * (1 - fretboardScale) / 2
+        if fret == 0 { return xStart - 18 } // 琴枕前方（空弦区中心）
         let position = stretchedFretCenterPosition(fret)
-        return leftMargin + nutWidth + position * usableWidth
+        return xStart + nutWidth + position * usableWidth
     }
 
     // MARK: - 触控 → 弦/品映射
@@ -118,21 +132,24 @@ final class FretboardView: UIView {
         // 弦：按 Y 坐标找最近 of 弦
         let topMargin: CGFloat = 50
         let bottomMargin: CGFloat = 50
-        let usableHeight = bounds.height - topMargin - bottomMargin
+        let usableHeight = (bounds.height - topMargin - bottomMargin) * fretboardScale
+        let yStart = topMargin + (bounds.height - topMargin - bottomMargin) * (1 - fretboardScale) / 2
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
-        var stringIndex = Int(round((point.y - topMargin) / spacing))
+        var stringIndex = Int(round((point.y - yStart) / spacing))
         stringIndex = max(0, min(stringIndex, GuitarConstants.stringCount - 1))
 
         // 品：按 X 坐标找品位
         let leftMargin: CGFloat = 70
         let rightMargin: CGFloat = 70
         let nutWidth: CGFloat = 12
-        if point.x <= leftMargin + nutWidth {
+        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale
+        let xStart = leftMargin + (bounds.width - leftMargin - rightMargin - nutWidth) * (1 - fretboardScale) / 2
+
+        if point.x <= xStart + nutWidth {
             return (stringIndex, 0) // 空弦区域
         }
 
-        let usableWidth = bounds.width - leftMargin - rightMargin - nutWidth
-        let relativeX = (point.x - (leftMargin + nutWidth)) / usableWidth
+        let relativeX = (point.x - (xStart + nutWidth)) / usableWidth
 
         // 遍历品位找到触点所在的品位区间
         var fret = 0
@@ -245,15 +262,16 @@ final class FretboardView: UIView {
 
     private func drawNut(_ ctx: CGContext) {
         let leftMargin: CGFloat = 70
-        let nutRect = CGRect(x: leftMargin, y: 0, width: 12, height: bounds.height)
+        let xStart = leftMargin + (bounds.width - leftMargin - 70 - 12) * (1 - fretboardScale) / 2
+        let nutRect = CGRect(x: xStart, y: 0, width: 12, height: bounds.height)
         ctx.setFillColor(UIColor(red: 0.95, green: 0.93, blue: 0.88, alpha: 1.0).cgColor)
         ctx.fill(nutRect)
 
         // 琴枕右边缘阴影
         ctx.setStrokeColor(UIColor(white: 0.3, alpha: 0.5).cgColor)
         ctx.setLineWidth(1)
-        ctx.move(to: CGPoint(x: leftMargin + 12, y: 0))
-        ctx.addLine(to: CGPoint(x: leftMargin + 12, y: bounds.height))
+        ctx.move(to: CGPoint(x: xStart + 12, y: 0))
+        ctx.addLine(to: CGPoint(x: xStart + 12, y: bounds.height))
         ctx.strokePath()
     }
 
@@ -261,12 +279,15 @@ final class FretboardView: UIView {
         ctx.setStrokeColor(fretWireColor.cgColor)
         let topMargin: CGFloat = 50
         let bottomMargin: CGFloat = 50
+        
+        let yStart = topMargin + (bounds.height - topMargin - bottomMargin) * (1 - fretboardScale) / 2
+        let usableHeight = (bounds.height - topMargin - bottomMargin) * fretboardScale
 
         for fret in 1...GuitarConstants.fretCount {
             let x = fretX(fret)
             ctx.setLineWidth(fret == 12 ? 2.5 : 1.5) // 12 品加粗
-            ctx.move(to: CGPoint(x: x, y: topMargin - 15))
-            ctx.addLine(to: CGPoint(x: x, y: bounds.height - bottomMargin + 15))
+            ctx.move(to: CGPoint(x: x, y: yStart - 15))
+            ctx.addLine(to: CGPoint(x: x, y: yStart + usableHeight + 15))
             ctx.strokePath()
         }
     }
