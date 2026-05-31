@@ -25,6 +25,7 @@ struct ChordDiagramView: View {
             Text(chordName)
                 .font(.system(size: 16, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
+                .id("chord_name_\(chordName)")
 
             // 指板图
             Canvas { context, size in

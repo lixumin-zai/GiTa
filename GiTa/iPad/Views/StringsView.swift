@@ -52,6 +52,7 @@ final class StringsStrumsView: UIView {
         isUserInteractionEnabled = true
         backgroundColor = .clear
         contentMode = .redraw
+        clipsToBounds = true
         setupDisplayLink()
     }
 
@@ -174,7 +175,7 @@ final class StringsStrumsView: UIView {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
 
         let topMargin: CGFloat = 50
-        let bottomMargin: CGFloat = 50
+        let bottomMargin: CGFloat = 95
         let stringTop = topMargin
         let stringBottom = bounds.height - bottomMargin
 

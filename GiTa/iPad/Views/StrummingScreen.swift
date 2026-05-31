@@ -160,6 +160,7 @@ struct StrummingScreen: View {
                 Text(viewModel.connectionStatusText)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.white.opacity(0.9))
+                    .id("conn_status_\(viewModel.connectionStatusText)")
 
                 if viewModel.isConnected && !viewModel.connectedDeviceName.isEmpty {
                     Text(viewModel.connectedDeviceName)
