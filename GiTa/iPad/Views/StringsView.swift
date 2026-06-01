@@ -11,9 +11,6 @@ final class StringsStrumsView: UIView {
     /// 扫弦回调：(起始弦, 结束弦, 速度)
     var onStrum: ((Int, Int, Double) -> Void)?
 
-    /// 敲击面板回调
-    var onKnock: (() -> Void)?
-
     // MARK: - 状态
 
     /// 当前每根弦的发声音名（用于显示）
@@ -124,8 +121,7 @@ final class StringsStrumsView: UIView {
             
             // 🚀 判断是否在琴弦区之外的留白（留 40pt 余量给第1/6弦防误触）
             if pos.y < topMargin - 40 || pos.y > bounds.height - bottomMargin + 40 {
-                onKnock?()
-                continue // 敲击事件，不再记录为拨弦
+                continue // 忽略点击边缘留白，不再误触发拨弦
             }
             
             let string = nearestString(for: pos.y)

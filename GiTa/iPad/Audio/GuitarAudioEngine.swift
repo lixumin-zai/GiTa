@@ -8,7 +8,6 @@ final class GuitarAudioEngine {
 
     private let engine = AVAudioEngine()
     private let samplers: [AVAudioUnitSampler]
-    private let percussionSampler = AVAudioUnitSampler()
     private let samplerMixerNode = AVAudioMixerNode()
     private let effectsChain: EffectsChain
 
@@ -100,9 +99,8 @@ final class GuitarAudioEngine {
     // MARK: - 引擎设置
 
     private func setupEngine() {
-        // 1. 挂载 6 个琴弦采样器节点、打击乐节点和琴弦混音器节点
+        // 1. 挂载 6 个琴弦采样器节点和琴弦混音器节点
         engine.attach(samplerMixerNode)
-        engine.attach(percussionSampler)
         for sampler in samplers {
             engine.attach(sampler)
         }
@@ -114,7 +112,6 @@ final class GuitarAudioEngine {
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
 
         // 3. 将每个采样器连接至琴弦混音器
-        engine.connect(percussionSampler, to: samplerMixerNode, format: format)
         for sampler in samplers {
             engine.connect(sampler, to: samplerMixerNode, format: format)
         }
@@ -190,19 +187,6 @@ final class GuitarAudioEngine {
                 print("[GuitarAudioEngine] Failed to load instrument on string \(i): \(error)")
             }
         }
-        
-        // 异步加载打击乐组（用于敲击面板声音），GM Standard Drum Kit
-        do {
-            try percussionSampler.loadSoundBankInstrument(
-                at: sf2URL,
-                program: 0,
-                bankMSB: 120, // GM Percussion Bank
-                bankLSB: 0
-            )
-            print("[GuitarAudioEngine] Successfully loaded percussion kit")
-        } catch {
-            print("[GuitarAudioEngine] Failed to load percussion kit: \(error)")
-        }
     }
 
     // MARK: - 启动/停止
@@ -227,23 +211,8 @@ final class GuitarAudioEngine {
         currentFretState = state
     }
 
-    // MARK: - 拨弦与敲击接口
+    // MARK: - 拨弦接口
     
-    /// 敲击面板 (模拟拍打吉他木箱)
-    func playKnock(amplitude: Float = 1.0) {
-        let velocity = UInt8(max(0, min(127, Int(amplitude * 127.0))))
-        // 采用双层音频合成极度拟真的吉他打板音色：
-        // 1. Note 77 (Low Wood Block): 提供木材清脆的"嗒"声
-        // 2. Note 35 (Acoustic Bass Drum): 提供极轻的木箱低频共鸣空腔"咚"声
-        
-        let woodBlockNote: UInt8 = 77
-        let bassDrumNote: UInt8 = 35
-        
-        percussionSampler.startNote(woodBlockNote, withVelocity: velocity, onChannel: 0)
-        // 低频箱体共振的音量给轻一点，避免像敲鼓
-        percussionSampler.startNote(bassDrumNote, withVelocity: UInt8(Float(velocity) * 0.35), onChannel: 0)
-    }
-
     /// 拨单弦
     /// - Parameters:
     ///   - stringIndex: 弦索引 (0=6弦/低E, 5=1弦/高E)
