@@ -85,6 +85,7 @@ struct StrummingScreen: View {
                     volume: $viewModel.volume,
                     reverbAmount: $viewModel.reverbAmount,
                     guitarType: $viewModel.guitarType,
+                    isMIDIModeEnabled: $viewModel.isMIDIModeEnabled,
                     loudness: viewModel.loudness
                 )
                 .padding(.horizontal, 40)

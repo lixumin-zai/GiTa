@@ -21,6 +21,26 @@ final class StrummingViewModel {
     var volume: Float = 0.8 {
         didSet { audioEngine.volume = volume }
     }
+    
+    var isReverbEnabled: Bool = false {
+        didSet {
+            audioEngine.setReverb(isReverbEnabled ? 0.6 : 0.0)
+        }
+    }
+    
+    /// 是否开启 MIDI 联动模式（开启后本地静音，仅输出虚拟 MIDI 信号控制库乐队等 App）
+    var isMIDIModeEnabled: Bool = false {
+        didSet {
+            audioEngine.isLocalAudioMuted = isMIDIModeEnabled
+            
+            // 如果开启 MIDI 模式，给一个震动反馈提醒
+            if isMIDIModeEnabled {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+            }
+        }
+    }
+    
     var reverbAmount: Float = 0.3 {
         didSet { audioEngine.setReverb(reverbAmount) }
     }

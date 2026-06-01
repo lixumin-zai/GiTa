@@ -6,6 +6,7 @@ struct ControlBarView: View {
     @Binding var volume: Float
     @Binding var reverbAmount: Float
     @Binding var guitarType: GuitarType
+    @Binding var isMIDIModeEnabled: Bool
     let loudness: Float // 实时声音响度
 
     var body: some View {
@@ -33,6 +34,13 @@ struct ControlBarView: View {
 
             // 吉他类型选择
             guitarTypeSelector
+
+            Divider()
+                .frame(height: 30)
+                .overlay(Color.white.opacity(0.15))
+                
+            // MIDI 联动切换
+            midiModeToggle
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
@@ -142,5 +150,35 @@ struct ControlBarView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+    
+    private var midiModeToggle: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                isMIDIModeEnabled.toggle()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: isMIDIModeEnabled ? "pianokeys.inverse" : "pianokeys")
+                    .font(.system(size: 14))
+                Text("MIDI 联动")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(isMIDIModeEnabled ? .white : .white.opacity(0.6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                isMIDIModeEnabled
+                    ? LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isMIDIModeEnabled ? Color.white.opacity(0.5) : Color.white.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: isMIDIModeEnabled ? .purple.opacity(0.5) : .clear, radius: 8, y: 2)
+        }
+        .buttonStyle(.plain)
     }
 }

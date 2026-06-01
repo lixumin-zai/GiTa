@@ -1,4 +1,6 @@
 import AVFoundation
+import CoreMIDI
+import os.log
 
 /// 6 弦吉他音频引擎 (SF2 SoundFont 采样版)
 /// 使用 6 个独立的 AVAudioUnitSampler 节点来对应 6 根物理弦，模拟真实的吉他切音/余音特性，同时通过汇聚 Mixer 节点的 Tap 进行响度测算
@@ -41,6 +43,11 @@ final class GuitarAudioEngine {
 
     /// 当前按弦状态（从网络接收）
     private(set) var currentFretState = FretState.empty
+
+    // MARK: - MIDI 输出开关
+    
+    /// 是否静音本地采样器（当开启库乐队联动模式时设为 true，此时仅广播 MIDI 信号）
+    var isLocalAudioMuted: Bool = false
 
     // MARK: - 初始化
 
@@ -230,11 +237,18 @@ final class GuitarAudioEngine {
 
         // 3. 🎸 物理断音：如果在该琴弦上有正在发声的音符，立刻停掉它以模拟物理重拨打断，实现极佳的琴弦断音体验
         if let prevNote = lastMidiNotes[stringIndex] {
-            samplers[stringIndex].stopNote(prevNote, onChannel: 0)
+            if !isLocalAudioMuted {
+                samplers[stringIndex].stopNote(prevNote, onChannel: 0)
+            }
+            MIDIEngine.shared.sendNoteOff(note: prevNote, channel: 0)
         }
 
-        // 4. 发送 MIDI Note On 事件触发采样回放
-        samplers[stringIndex].startNote(UInt8(midiNote), withVelocity: velocity, onChannel: 0)
+        // 4. 发送 MIDI Note On 事件
+        if !isLocalAudioMuted {
+            samplers[stringIndex].startNote(UInt8(midiNote), withVelocity: velocity, onChannel: 0)
+        }
+        MIDIEngine.shared.sendNoteOn(note: UInt8(midiNote), velocity: velocity, channel: 0)
+        
         lastMidiNotes[stringIndex] = UInt8(midiNote)
     }
 
@@ -267,7 +281,10 @@ final class GuitarAudioEngine {
     func muteAll() {
         for i in 0..<GuitarConstants.stringCount {
             if let prevNote = lastMidiNotes[i] {
-                samplers[i].stopNote(prevNote, onChannel: 0)
+                if !isLocalAudioMuted {
+                    samplers[i].stopNote(prevNote, onChannel: 0)
+                }
+                MIDIEngine.shared.sendNoteOff(note: prevNote, channel: 0)
                 lastMidiNotes[i] = nil
             }
         }
@@ -305,5 +322,59 @@ enum GuitarType: String, CaseIterable, Identifiable {
         case .electric:  return "bolt"
         case .classical: return "music.note"
         }
+    }
+}
+
+/// 用于管理虚拟 MIDI 输出的引擎
+/// 将 GiTa 变成一个“虚拟 MIDI 控制器”，通过系统总线向外广播音符
+final class MIDIEngine {
+    static let shared = MIDIEngine()
+    
+    private var client: MIDIClientRef = 0
+    private var source: MIDIEndpointRef = 0
+    
+    private init() {
+        setupMIDI()
+    }
+    
+    private func setupMIDI() {
+        var status = MIDIClientCreate("GiTa MIDI Client" as CFString, nil, nil, &client)
+        guard status == noErr else {
+            os_log("[MIDIEngine] Failed to create MIDI client", type: .error)
+            return
+        }
+        
+        status = MIDISourceCreate(client, "GiTa Virtual MIDI" as CFString, &source)
+        guard status == noErr else {
+            os_log("[MIDIEngine] Failed to create MIDI source", type: .error)
+            return
+        }
+        
+        os_log("[MIDIEngine] Successfully created GiTa Virtual MIDI source", type: .info)
+    }
+    
+    /// 发送 Note On 消息（按下琴弦）
+    func sendNoteOn(note: UInt8, velocity: UInt8, channel: UInt8 = 0) {
+        sendMessage(status: 0x90 + channel, data1: note, data2: velocity)
+    }
+    
+    /// 发送 Note Off 消息（松开琴弦/静音）
+    func sendNoteOff(note: UInt8, channel: UInt8 = 0) {
+        sendMessage(status: 0x80 + channel, data1: note, data2: 0)
+    }
+    
+    private func sendMessage(status: UInt8, data1: UInt8, data2: UInt8) {
+        let midiData: [UInt8] = [status, data1, data2]
+        
+        // 分配一段内存构建 PacketList
+        let packetListSize = MemoryLayout<MIDIPacketList>.size + midiData.count
+        let packetListPointer = UnsafeMutablePointer<MIDIPacketList>.allocate(capacity: 1)
+        defer { packetListPointer.deallocate() }
+        
+        let packetPointer = MIDIPacketListInit(packetListPointer)
+        MIDIPacketListAdd(packetListPointer, packetListSize, packetPointer, 0, midiData.count, midiData)
+        
+        // 通过虚拟 Source 广播给整个 iOS 系统的其他音乐应用 (如 GarageBand)
+        MIDIReceived(source, packetListPointer)
     }
 }
