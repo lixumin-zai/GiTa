@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import UIKit
 
 /// iPad 拨弦端核心 ViewModel
 @Observable
@@ -12,7 +13,8 @@ final class StrummingViewModel {
 
     /// 连接状态
     var isConnected = false
-    var connectionStatusText = "搜索指板..."
+    var connectionStatus = ConnectionStatus.searching
+    var connectionStatusText: String { connectionStatus.rawValue }
     var connectedDeviceName = ""
 
     /// 音频参数
@@ -45,6 +47,7 @@ final class StrummingViewModel {
 
     init() {
         setupNetwork()
+        setupLifecycleObservers()
         audioEngine.start()
         startLoudnessTimer()
     }
@@ -79,20 +82,20 @@ final class StrummingViewModel {
                 switch state {
                 case .connected:
                     // 仅代表 socket 建立，不代表物理握手成功。开启定时器尝试握手。
-                    self.connectionStatusText = "正在握手..."
+                    self.connectionStatus = .handshaking
                     self.startHandshakeTimer()
                 case .connecting:
                     self.isConnected = false
-                    self.connectionStatusText = "连接中..."
+                    self.connectionStatus = .connecting
                 case .disconnected:
                     self.isConnected = false
-                    self.connectionStatusText = "连接已断开"
+                    self.connectionStatus = .disconnected
                     self.stopHandshakeTimer()
                     self.stopTimeoutTimer()
                     self.stopPingTimer()
-                case .failed(let msg):
+                case .failed:
                     self.isConnected = false
-                    self.connectionStatusText = "连接失败"
+                    self.connectionStatus = .failed
                     self.stopHandshakeTimer()
                     self.stopTimeoutTimer()
                     self.stopPingTimer()
@@ -160,7 +163,7 @@ final class StrummingViewModel {
         
         // 🚀 核心修复：立即、同步更新所有 UI 状态属性，绝对不放在异步延时里，彻底根除重新搜索时的竞态条件 (Race Condition)
         self.isConnected = false
-        self.connectionStatusText = "连接已断开"
+        self.connectionStatus = .disconnected
         self.discoveredDevices.removeAll()
         
         // 2. 仅仅将底层的 Socket 关闭操作延迟 50ms 放在后台，以保证 UDP 断开数据包能够顺利飞出网卡
@@ -173,7 +176,7 @@ final class StrummingViewModel {
     /// 重新开始搜索设备
     func startScanning() {
         disconnect()
-        connectionStatusText = "正在搜索..."
+        connectionStatus = .searching
         browser.startBrowsing()
     }
 
@@ -187,7 +190,7 @@ final class StrummingViewModel {
             guard let self else { return }
             if !self.isConnected {
                 self.isConnected = true
-                self.connectionStatusText = "已连接"
+                self.connectionStatus = .connected
                 self.stopHandshakeTimer()
                 self.startTimeoutTimer()
                 self.startPingTimer() // 启动发送给 iPhone 的心跳，实现双向超时检测
@@ -299,6 +302,30 @@ final class StrummingViewModel {
         loudnessTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.loudness = self.audioEngine.currentLoudness
+        }
+    }
+
+    // MARK: - 生命周期监控
+
+    private func setupLifecycleObservers() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("[StrummingViewModel] App entered background. Suspending network...")
+            self?.disconnect()
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("[StrummingViewModel] App became active. Restarting browser...")
+            if self?.isConnected == false {
+                self?.startScanning()
+            }
         }
     }
 }

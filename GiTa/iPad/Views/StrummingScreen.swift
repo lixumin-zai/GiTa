@@ -27,9 +27,8 @@ struct StrummingScreen: View {
                     // 左上角：连接卡片及在其下方的设备列表
                     VStack(alignment: .leading, spacing: 10) {
                         connectionCard
-                            .frame(width: 240)
                         
-                        // 🚀 补回被遗落的可用设备列表，支持点击连接
+                        // 补回被遗落的可用设备列表，支持点击连接
                         if !viewModel.isConnected && !viewModel.discoveredDevices.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("发现的指板设备：")
@@ -45,7 +44,8 @@ struct StrummingScreen: View {
                                                 .foregroundColor(.cyan)
                                             Text(device.name)
                                                 .font(.system(size: 12))
-                                            Spacer()
+                                                .lineLimit(1)
+                                            Spacer(minLength: 4)
                                             Text("连接")
                                                 .font(.system(size: 10, weight: .bold))
                                                 .foregroundColor(.cyan)
@@ -62,7 +62,7 @@ struct StrummingScreen: View {
                             .padding(10)
                             .background(.ultraThinMaterial.opacity(0.3))
                             .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .frame(width: 240)
+                            .frame(width: 240) // 跟随卡片固定宽度
                             .shadow(color: .black.opacity(0.15), radius: 6)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
@@ -76,8 +76,8 @@ struct StrummingScreen: View {
                         .shadow(color: .black.opacity(0.2), radius: 8)
                 }
                 .padding(.horizontal, 40)
-                .padding(.top, 36) // 适应全面屏顶部安全区与物理圆角
-
+                .padding(.top, 58) // 🚀 显著增加顶部间距，彻底消除 iPad 物理圆角、挖孔及系统状态栏的画面遮挡与裁剪
+                
                 Spacer()
 
                 // 底部悬浮条：音量与混响效果毛玻璃控制栏
@@ -91,6 +91,7 @@ struct StrummingScreen: View {
                 .padding(.bottom, 36) // 适应全面屏底部安全区与物理圆角
             }
         }
+        .ignoresSafeArea() // 🚀 关键修复：忽略所有动态安全区变化，彻底解决由于系统通知横幅下拉导致整个界面集体下移再弹回的跳动问题
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
     }
@@ -131,63 +132,60 @@ struct StrummingScreen: View {
     // MARK: - 连接状态卡片
 
     private var connectionCard: some View {
-        HStack(spacing: 10) {
-            // 连接指示灯
+        HStack(spacing: 0) {
+            // 1. 状态点 (固定宽度)
             Circle()
                 .fill(viewModel.isConnected ? Color.green : Color.orange)
-                .frame(width: 10, height: 10)
-                .shadow(color: viewModel.isConnected ? .green.opacity(0.5) : .clear, radius: 4)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.connectionStatusText)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white.opacity(0.9))
-                    .id("conn_status_\(viewModel.connectionStatusText)")
-
-                // 🚀 保持高度恒定：即使未连接，也渲染一个固定高度占位，彻底消除上下撑开布局的抖动！
-                Text(viewModel.isConnected ? viewModel.connectedDeviceName : " ")
+                .frame(width: 8, height: 8)
+                .shadow(color: viewModel.isConnected ? .green : .orange, radius: 3)
+                .frame(width: 30)
+            
+            // 2. 文本信息 (固定宽度，防止文字挤压布局)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(viewModel.isConnected ? "已连接" : viewModel.connectionStatusText)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(viewModel.isConnected ? .green : .orange)
+                    .lineLimit(1)
+                
+                Text(viewModel.isConnected ? viewModel.connectedDeviceName : "等待指板设备...")
                     .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.5))
-                    .frame(height: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
             }
-
+            .frame(width: 110, alignment: .leading)
+            
             Spacer()
-
-            if viewModel.isConnected {
-                Button {
+            
+            // 3. 操作按钮 (固定宽高)
+            Button {
+                if viewModel.isConnected {
                     viewModel.disconnect()
-                } label: {
-                    Text("断开")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.red.opacity(0.8))
-                        .frame(width: 76, height: 22) // 🚀 固定宽高
-                        .background(Color.red.opacity(0.15))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
+                } else {
                     viewModel.startScanning()
-                } label: {
-                    Text("重新搜索")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.cyan)
-                        .frame(width: 76, height: 22) // 🚀 固定与 "断开" 相同的宽高
-                        .background(Color.cyan.opacity(0.15))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
-                .buttonStyle(.plain)
+            } label: {
+                Text(viewModel.isConnected ? "断开" : "重搜")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(viewModel.isConnected ? .white : .cyan)
+                    .frame(width: 56, height: 28)
+                    .background(viewModel.isConnected ? Color.red.opacity(0.8) : Color.cyan.opacity(0.15))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(viewModel.isConnected ? Color.red : Color.cyan.opacity(0.5), lineWidth: 1)
+                    )
             }
-
-            Image(systemName: viewModel.isConnected ? "wifi" : "wifi.slash")
-                .font(.system(size: 14))
-                .foregroundColor(viewModel.isConnected ? .green : .orange)
+            .buttonStyle(.plain)
+            .frame(width: 70, alignment: .trailing)
         }
         .padding(.horizontal, 12)
-        .frame(height: 52) // 🚀 固定整个卡片高度为 52pt
-        .background(.ultraThinMaterial.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .shadow(color: .black.opacity(0.15), radius: 6)
+        .frame(width: 240, height: 56) // 整个卡片绝对固定的宽高，绝不因内容变化而跳动
+        .background(Color.black.opacity(0.6))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+        )
     }
 
     // MARK: - 拨弦区域

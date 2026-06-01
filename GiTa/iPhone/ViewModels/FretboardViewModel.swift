@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 /// 指板状态管理 — iPhone 端核心 ViewModel
 @Observable
@@ -12,9 +13,8 @@ final class FretboardViewModel {
 
     /// 连接状态
     var isConnected = false
-
-    /// 连接状态文字
-    var connectionStatusText = "等待连接..."
+    var connectionStatus = ConnectionStatus.disconnected
+    var connectionStatusText: String { connectionStatus.iphoneDisplay }
 
     /// 指板大小缩放比例 (0.8 ~ 1.2)
     var scale: Double = 1.0
@@ -32,6 +32,7 @@ final class FretboardViewModel {
 
     init() {
         setupNetwork()
+        setupLifecycleObservers()
     }
 
     deinit {
@@ -51,22 +52,22 @@ final class FretboardViewModel {
                 switch state {
                 case .connected:
                     self.isConnected = true
-                    self.connectionStatusText = "已连接"
+                    self.connectionStatus = .connected
                     self.lastReceivedTime = Date() // 重置接收时间
                     self.startHeartbeat()
                     self.startTimeoutTimer()
                     HapticManager.shared.connectionSuccess()
                 case .connecting:
                     self.isConnected = false
-                    self.connectionStatusText = "连接中..."
+                    self.connectionStatus = .connecting
                 case .disconnected:
                     self.isConnected = false
-                    self.connectionStatusText = "等待连接..."
+                    self.connectionStatus = .disconnected
                     self.stopHeartbeat()
                     self.stopTimeoutTimer()
                 case .failed:
                     self.isConnected = false
-                    self.connectionStatusText = "连接失败"
+                    self.connectionStatus = .failed
                     self.stopHeartbeat()
                     self.stopTimeoutTimer()
                 }
@@ -196,5 +197,29 @@ final class FretboardViewModel {
     private func stopTimeoutTimer() {
         timeoutTimer?.invalidate()
         timeoutTimer = nil
+    }
+
+    // MARK: - 生命周期监控
+
+    private func setupLifecycleObservers() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("[FretboardViewModel] App entered background. Suspending network...")
+            self?.advertiser.stopAdvertising()
+            self?.connection.disconnect()
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("[FretboardViewModel] App became active. Restarting advertiser...")
+            self?.advertiser.stopAdvertising()
+            self?.advertiser.startAdvertising()
+        }
     }
 }

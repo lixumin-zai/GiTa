@@ -92,8 +92,8 @@ final class StringsStrumsView: UIView {
 
     /// 弦的 Y 坐标
     private func stringY(_ index: Int) -> CGFloat {
-        let topMargin: CGFloat = 200
-        let bottomMargin: CGFloat = 200
+        let topMargin: CGFloat = 240
+        let bottomMargin: CGFloat = 240
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         return topMargin + CGFloat(index) * spacing
@@ -101,8 +101,8 @@ final class StringsStrumsView: UIView {
 
     /// 根据 Y 坐标找到最近的弦
     private func nearestString(for y: CGFloat) -> Int {
-        let topMargin: CGFloat = 200
-        let bottomMargin: CGFloat = 200
+        let topMargin: CGFloat = 240
+        let bottomMargin: CGFloat = 240
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         var index = Int(round((y - topMargin) / spacing))
