@@ -16,6 +16,10 @@ struct StringsViewRepresentable: UIViewRepresentable {
             viewModel.strum(from: from, to: to, velocity: velocity)
         }
 
+        view.onKnock = {
+            viewModel.knock()
+        }
+
         return view
     }
 

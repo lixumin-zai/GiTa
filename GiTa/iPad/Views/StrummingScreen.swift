@@ -22,10 +22,17 @@ struct StrummingScreen: View {
 
             // 4. 🚀 悬浮辅助控制系统 (玻璃层叠 ZStack)
             VStack(spacing: 0) {
-                // 顶部左右悬浮条：左边是连接卡片，右边是按弦和弦图
+                // 顶部左右悬浮条：左边是和弦指法图，右边是连接卡片
                 HStack(alignment: .top) {
-                    // 左上角：连接卡片及在其下方的设备列表
-                    VStack(alignment: .leading, spacing: 10) {
+                    // 左上角：和弦指法图 (辅助指引，小比例融合)
+                    ChordDiagramView(fretState: viewModel.fretState)
+                        .scaleEffect(0.9)
+                        .shadow(color: .black.opacity(0.2), radius: 8)
+                    
+                    Spacer()
+                    
+                    // 右上角：连接卡片及在其下方的设备列表
+                    VStack(alignment: .trailing, spacing: 10) {
                         connectionCard
                         
                         // 补回被遗落的可用设备列表，支持点击连接
@@ -67,13 +74,6 @@ struct StrummingScreen: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
-                    
-                    Spacer()
-                    
-                    // 右上角：和弦指法图 (辅助指引，小比例融合)
-                    ChordDiagramView(fretState: viewModel.fretState)
-                        .scaleEffect(0.9)
-                        .shadow(color: .black.opacity(0.2), radius: 8)
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 58) // 🚀 显著增加顶部间距，彻底消除 iPad 物理圆角、挖孔及系统状态栏的画面遮挡与裁剪

@@ -231,6 +231,15 @@ final class StrummingViewModel {
 
     // MARK: - 拨弦接口
 
+    /// 敲击面板
+    func knock(amplitude: Float = 1.0) {
+        audioEngine.playKnock(amplitude: amplitude)
+        // 沉闷的震动反馈模拟敲击木箱
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.prepare()
+        generator.impactOccurred()
+    }
+
     /// 拨单弦
     func pluckString(_ index: Int, amplitude: Float = 0.8) {
         audioEngine.pluckString(index, amplitude: amplitude)

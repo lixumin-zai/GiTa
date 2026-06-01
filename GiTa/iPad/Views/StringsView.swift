@@ -11,6 +11,9 @@ final class StringsStrumsView: UIView {
     /// 扫弦回调：(起始弦, 结束弦, 速度)
     var onStrum: ((Int, Int, Double) -> Void)?
 
+    /// 敲击面板回调
+    var onKnock: (() -> Void)?
+
     // MARK: - 状态
 
     /// 当前每根弦的发声音名（用于显示）
@@ -115,6 +118,16 @@ final class StringsStrumsView: UIView {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let pos = touch.location(in: self)
+            
+            let topMargin: CGFloat = 240
+            let bottomMargin: CGFloat = 240
+            
+            // 🚀 判断是否在琴弦区之外的留白（留 40pt 余量给第1/6弦防误触）
+            if pos.y < topMargin - 40 || pos.y > bounds.height - bottomMargin + 40 {
+                onKnock?()
+                continue // 敲击事件，不再记录为拨弦
+            }
+            
             let string = nearestString(for: pos.y)
             touchStartString[touch] = string
             touchStartTime[touch] = touch.timestamp
