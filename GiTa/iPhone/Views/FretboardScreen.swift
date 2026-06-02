@@ -54,23 +54,46 @@ struct FretboardScreen: View {
                 // 指板缩放控制面板 (顶部中央悬浮，带毛玻璃与弹簧动画)
                 if showSettings {
                     VStack {
-                        HStack(spacing: 12) {
-                            Image(systemName: "hand.point.up.left.and.text.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(.cyan)
+                        VStack(spacing: 12) {
+                            // 整体大小缩放
+                            HStack(spacing: 12) {
+                                Image(systemName: "hand.point.up.left.and.text.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.cyan)
 
-                            Text("指板缩放")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.white.opacity(0.7))
+                                Text("整体缩放")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.7))
 
-                            Slider(value: $viewModel.scale, in: 0.8...1.2)
-                                .tint(.cyan)
-                                .frame(width: 130)
+                                Slider(value: $viewModel.scale, in: 0.8...1.2)
+                                    .tint(.cyan)
+                                    .frame(width: 130)
 
-                            Text("\(Int(viewModel.scale * 100))%")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.cyan)
-                                .frame(width: 35, alignment: .trailing)
+                                Text("\(Int(viewModel.scale * 100))%")
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.cyan)
+                                    .frame(width: 35, alignment: .trailing)
+                            }
+                            
+                            // 品丝间距拉伸
+                            HStack(spacing: 12) {
+                                Image(systemName: "arrow.left.and.right")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.purple)
+
+                                Text("品丝间距")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.7))
+
+                                Slider(value: $viewModel.widthMultiplier, in: 1.0...3.0)
+                                    .tint(.purple)
+                                    .frame(width: 130)
+
+                                Text(String(format: "%.1fx", viewModel.widthMultiplier))
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.purple)
+                                    .frame(width: 35, alignment: .trailing)
+                            }
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)

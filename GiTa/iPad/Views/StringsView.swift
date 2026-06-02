@@ -92,8 +92,8 @@ final class StringsStrumsView: UIView {
 
     /// 弦的 Y 坐标
     private func stringY(_ index: Int) -> CGFloat {
-        let topMargin: CGFloat = 240
-        let bottomMargin: CGFloat = 240
+        let topMargin: CGFloat = 260
+        let bottomMargin: CGFloat = 260
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         return topMargin + CGFloat(index) * spacing
@@ -101,8 +101,8 @@ final class StringsStrumsView: UIView {
 
     /// 根据 Y 坐标找到最近的弦
     private func nearestString(for y: CGFloat) -> Int {
-        let topMargin: CGFloat = 240
-        let bottomMargin: CGFloat = 240
+        let topMargin: CGFloat = 260
+        let bottomMargin: CGFloat = 260
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         var index = Int(round((y - topMargin) / spacing))
@@ -116,11 +116,11 @@ final class StringsStrumsView: UIView {
         for touch in touches {
             let pos = touch.location(in: self)
             
-            let topMargin: CGFloat = 240
-            let bottomMargin: CGFloat = 240
+            let topMargin: CGFloat = 260
+            let bottomMargin: CGFloat = 260
             
             // 🚀 判断是否在琴弦区之外的留白（留 40pt 余量给第1/6弦防误触）
-            if pos.y < topMargin - 40 || pos.y > bounds.height - bottomMargin + 40 {
+            if pos.y < topMargin - 60 || pos.y > bounds.height - bottomMargin + 40 {
                 continue // 忽略点击边缘留白，不再误触发拨弦
             }
             

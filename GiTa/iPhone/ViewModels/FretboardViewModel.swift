@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import UIKit
+import MediaPlayer
+import AVFoundation
+import Combine
+import UIKit
+import SwiftUI
 
 /// 指板状态管理 — iPhone 端核心 ViewModel
 @Observable
@@ -16,13 +21,20 @@ final class FretboardViewModel {
     var connectionStatus = ConnectionStatus.disconnected
     var connectionStatusText: String { connectionStatus.iphoneDisplay }
 
-    /// 指板大小缩放比例 (0.8 ~ 1.2)
+    /// 指板大小整体缩放比例 (0.8 ~ 1.2)
     var scale: Double = 1.0
+
+    /// 指板横向品距拉伸倍率 (1.0 ~ 3.0)
+    var widthMultiplier: Double = 1.5 // 默认 1.5 倍拉宽
+
+    /// 指板横向滚动偏移量
+    var offsetX: Double = 0.0
 
     // MARK: - 私有
 
     private let advertiser = ServiceAdvertiser()
     private let connection = PeerConnection()
+    private let volumeObserver = VolumeKeyObserver()
     private var sequenceNumber: UInt16 = 0
     private var heartbeatTimer: Timer?
     private var lastReceivedTime = Date()
@@ -33,6 +45,7 @@ final class FretboardViewModel {
     init() {
         setupNetwork()
         setupLifecycleObservers()
+        setupVolumeObserver()
     }
 
     deinit {
@@ -40,6 +53,7 @@ final class FretboardViewModel {
         timeoutTimer?.invalidate()
         advertiser.stopAdvertising()
         connection.disconnect()
+        volumeObserver.stop()
     }
 
     // MARK: - 网络设置
@@ -88,6 +102,40 @@ final class FretboardViewModel {
 
         // 开始广播
         advertiser.startAdvertising()
+    }
+
+    // MARK: - 音量键拦截与平移
+
+    private func setupVolumeObserver() {
+        volumeObserver.onVolumeUp = { [weak self] in
+            // 带有动画的向右平移（滑向高把位）
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                self?.panRight()
+            }
+        }
+        
+        volumeObserver.onVolumeDown = { [weak self] in
+            // 带有动画的向左平移（滑向琴枕）
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                self?.panLeft()
+            }
+        }
+        
+        volumeObserver.start()
+    }
+    
+    private func panRight() {
+        let step: Double = 80.0 // 固定步长
+        // 估算最大偏移量
+        let screenWidth = UIScreen.main.bounds.width
+        let usableWidth = screenWidth * scale * widthMultiplier
+        let maxOffset = max(usableWidth - screenWidth, 0.0) + 150.0 // 允许末尾多滑出一点空间
+        offsetX = min(offsetX + step, maxOffset)
+    }
+    
+    private func panLeft() {
+        let step: Double = 80.0
+        offsetX = max(offsetX - step, 0.0)
     }
 
     // MARK: - 按弦操作
@@ -220,6 +268,66 @@ final class FretboardViewModel {
             print("[FretboardViewModel] App became active. Restarting advertiser...")
             self?.advertiser.stopAdvertising()
             self?.advertiser.startAdvertising()
+        }
+    }
+}
+
+// MARK: - VolumeKeyObserver
+
+/// 极客魔法：拦截硬件音量键进行自定义操作
+final class VolumeKeyObserver {
+    private var volumeView: MPVolumeView!
+    private var observer: NSKeyValueObservation?
+    private let targetVolume: Float = 0.5 // 固定将系统音量维持在 50%，防止按到极限值失效
+    
+    var onVolumeUp: (() -> Void)?
+    var onVolumeDown: (() -> Void)?
+    
+    func start() {
+        let audioSession = AVAudioSession.sharedInstance()
+        try? audioSession.setActive(true)
+        
+        volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
+        volumeView.isHidden = false 
+        
+        DispatchQueue.main.async {
+            if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+               let window = windowScene.windows.first(where: { $0.isKeyWindow }) {
+                window.addSubview(self.volumeView)
+            }
+            self.resetSystemVolume()
+        }
+        
+        observer = audioSession.observe(\.outputVolume, options: [.old, .new]) { [weak self] (session, change) in
+            guard let self = self,
+                  let newVol = change.newValue,
+                  let oldVol = change.oldValue else { return }
+            
+            if abs(newVol - self.targetVolume) < 0.05 { return }
+            
+            if newVol > oldVol {
+                DispatchQueue.main.async { self.onVolumeUp?() }
+            } else if newVol < oldVol {
+                DispatchQueue.main.async { self.onVolumeDown?() }
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.resetSystemVolume()
+            }
+        }
+    }
+    
+    func stop() {
+        observer?.invalidate()
+        observer = nil
+        DispatchQueue.main.async {
+            self.volumeView?.removeFromSuperview()
+        }
+    }
+    
+    private func resetSystemVolume() {
+        if let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first {
+            slider.value = targetVolume
         }
     }
 }

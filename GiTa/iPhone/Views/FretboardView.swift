@@ -20,15 +20,32 @@ final class FretboardView: UIView {
     /// 每根弦当前按下的品位（用于绘制指示器）
     private var pressedFrets: [Int: Int] = [:] // [弦索引: 品位]
 
-    /// 指板尺寸缩放比例 (0.8 ~ 1.2)
+    /// 指板尺寸整体缩放比例 (0.8 ~ 1.2)
     private var fretboardScale: CGFloat = 1.0
+
+    /// 指板宽度拉伸倍数 (1.0 ~ 3.0) - 用于分离品距
+    private var fretWidthMultiplier: CGFloat = 1.0
+
+    /// 指板横向滚动偏移量 (用于音量键平移)
+    private var fretboardOffsetX: CGFloat = 0.0
 
     // MARK: - 控制
 
-    func updateScale(_ scale: CGFloat) {
-        guard fretboardScale != scale else { return }
-        fretboardScale = scale
-        setNeedsDisplay()
+    func updateSettings(scale: CGFloat, widthMultiplier: CGFloat, offsetX: CGFloat) {
+        var changed = false
+        if fretboardScale != scale {
+            fretboardScale = scale
+            changed = true
+        }
+        if fretWidthMultiplier != widthMultiplier {
+            fretWidthMultiplier = widthMultiplier
+            changed = true
+        }
+        if fretboardOffsetX != offsetX {
+            fretboardOffsetX = offsetX
+            changed = true
+        }
+        if changed { setNeedsDisplay() }
     }
 
     // MARK: - 外观常量
@@ -107,10 +124,10 @@ final class FretboardView: UIView {
         let leftMargin: CGFloat = 70
         let rightMargin: CGFloat = 70
         let nutWidth: CGFloat = 12 // 琴枕宽度
-        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale
+        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale * fretWidthMultiplier
         let xStart = leftMargin + (bounds.width - leftMargin - rightMargin - nutWidth) * (1 - fretboardScale) / 2
         let position = stretchedFretPosition(fret)
-        return xStart + nutWidth + position * usableWidth
+        return xStart + nutWidth + position * usableWidth - fretboardOffsetX
     }
 
     /// 品位中心 X 坐标
@@ -118,11 +135,11 @@ final class FretboardView: UIView {
         let leftMargin: CGFloat = 70
         let rightMargin: CGFloat = 70
         let nutWidth: CGFloat = 12
-        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale
+        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale * fretWidthMultiplier
         let xStart = leftMargin + (bounds.width - leftMargin - rightMargin - nutWidth) * (1 - fretboardScale) / 2
-        if fret == 0 { return xStart - 18 } // 琴枕前方（空弦区中心）
+        if fret == 0 { return xStart - 18 - fretboardOffsetX } // 琴枕前方（空弦区中心）
         let position = stretchedFretCenterPosition(fret)
-        return xStart + nutWidth + position * usableWidth
+        return xStart + nutWidth + position * usableWidth - fretboardOffsetX
     }
 
     // MARK: - 触控 → 弦/品映射
@@ -142,14 +159,17 @@ final class FretboardView: UIView {
         let leftMargin: CGFloat = 70
         let rightMargin: CGFloat = 70
         let nutWidth: CGFloat = 12
-        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale
+        let usableWidth = (bounds.width - leftMargin - rightMargin - nutWidth) * fretboardScale * fretWidthMultiplier
         let xStart = leftMargin + (bounds.width - leftMargin - rightMargin - nutWidth) * (1 - fretboardScale) / 2
 
-        if point.x <= xStart + nutWidth {
+        // 添加 offsetX 还原真实的点击位置
+        let virtualX = point.x + fretboardOffsetX
+
+        if virtualX <= xStart + nutWidth {
             return (stringIndex, 0) // 空弦区域
         }
 
-        let relativeX = (point.x - (xStart + nutWidth)) / usableWidth
+        let relativeX = (virtualX - (xStart + nutWidth)) / usableWidth
 
         // 遍历品位找到触点所在的品位区间
         var fret = 0
@@ -262,7 +282,7 @@ final class FretboardView: UIView {
 
     private func drawNut(_ ctx: CGContext) {
         let leftMargin: CGFloat = 70
-        let xStart = leftMargin + (bounds.width - leftMargin - 70 - 12) * (1 - fretboardScale) / 2
+        let xStart = leftMargin + (bounds.width - leftMargin - 70 - 12) * (1 - fretboardScale) / 2 - fretboardOffsetX
         let nutRect = CGRect(x: xStart, y: 0, width: 12, height: bounds.height)
         ctx.setFillColor(UIColor(red: 0.95, green: 0.93, blue: 0.88, alpha: 1.0).cgColor)
         ctx.fill(nutRect)

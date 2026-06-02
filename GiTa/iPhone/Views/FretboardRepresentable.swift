@@ -20,6 +20,10 @@ struct FretboardRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: FretboardView, context: Context) {
-        uiView.updateScale(CGFloat(viewModel.scale))
+        uiView.updateSettings(
+            scale: CGFloat(viewModel.scale),
+            widthMultiplier: CGFloat(viewModel.widthMultiplier),
+            offsetX: CGFloat(viewModel.offsetX)
+        )
     }
 }
