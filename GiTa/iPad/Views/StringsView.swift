@@ -27,6 +27,10 @@ final class StringsStrumsView: UIView {
     private var touchLastString: [UITouch: Int] = [:]
     private var touchLastY: [UITouch: CGFloat] = [:]
 
+    /// 防重复拨弦与往复扫弦状态
+    private var touchDirection: [UITouch: Int] = [:] // 1 表示向下，-1 表示向上
+    private var pluckedStringsInCurrentDirection: [UITouch: Set<Int>] = [:]
+
     /// 显示链接（统一刷新振动动画）
     private var displayLink: CADisplayLink?
 
@@ -92,8 +96,8 @@ final class StringsStrumsView: UIView {
 
     /// 弦的 Y 坐标
     private func stringY(_ index: Int) -> CGFloat {
-        let topMargin: CGFloat = 260
-        let bottomMargin: CGFloat = 260
+        let topMargin: CGFloat = 220
+        let bottomMargin: CGFloat = 220
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         return topMargin + CGFloat(index) * spacing
@@ -101,8 +105,8 @@ final class StringsStrumsView: UIView {
 
     /// 根据 Y 坐标找到最近的弦
     private func nearestString(for y: CGFloat) -> Int {
-        let topMargin: CGFloat = 260
-        let bottomMargin: CGFloat = 260
+        let topMargin: CGFloat = 220
+        let bottomMargin: CGFloat = 220
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         var index = Int(round((y - topMargin) / spacing))
@@ -116,8 +120,8 @@ final class StringsStrumsView: UIView {
         for touch in touches {
             let pos = touch.location(in: self)
             
-            let topMargin: CGFloat = 260
-            let bottomMargin: CGFloat = 260
+            let topMargin: CGFloat = 220
+            let bottomMargin: CGFloat = 220
             
             // 🚀 判断是否在琴弦区之外的留白（留 40pt 余量给第1/6弦防误触）
             if pos.y < topMargin - 60 || pos.y > bounds.height - bottomMargin + 40 {
@@ -129,9 +133,11 @@ final class StringsStrumsView: UIView {
             touchStartTime[touch] = touch.timestamp
             touchLastString[touch] = string
             touchLastY[touch] = pos.y
+            touchDirection[touch] = nil
 
             // 立即触发当前触摸位置最近弦的拨片
             triggerPluck(string)
+            pluckedStringsInCurrentDirection[touch] = [string]
         }
     }
 
@@ -143,15 +149,37 @@ final class StringsStrumsView: UIView {
                 continue
             }
 
+            let direction = pos.y - lastY
+            
+            // 如果有实际的纵向移动
+            if abs(direction) > 0.1 {
+                let currentDirSign = direction > 0 ? 1 : -1
+                let lastDirSign = touchDirection[touch] ?? currentDirSign
+                
+                // 扫弦方向改变，则清空已拨弦记录（支持往复颤音扫弦）
+                if currentDirSign != lastDirSign {
+                    pluckedStringsInCurrentDirection[touch]?.removeAll()
+                }
+                touchDirection[touch] = currentDirSign
+            }
+
             // 🚀 物理跨越检测：如果手指本次移动横穿了任何一根弦的实际 Y 坐标，立即触发拨弦！
             let minY = min(lastY, pos.y)
             let maxY = max(lastY, pos.y)
 
-            for i in 0..<GuitarConstants.stringCount {
-                let yCoord = stringY(i)
-                if yCoord >= minY && yCoord <= maxY {
-                    // 跨越了该弦的实际坐标 → 完美触发拨片！
+            let stringsToCross = (0..<GuitarConstants.stringCount).filter {
+                let yCoord = stringY($0)
+                return yCoord >= minY && yCoord <= maxY
+            }
+
+            // 按照扫弦方向排序，保证连续拨弦时发声顺序自然
+            let isMovingDown = (touchDirection[touch] ?? 1) > 0
+            let sortedStrings = isMovingDown ? stringsToCross : stringsToCross.reversed()
+
+            for i in sortedStrings {
+                if pluckedStringsInCurrentDirection[touch]?.contains(i) == false {
                     triggerPluck(i)
+                    pluckedStringsInCurrentDirection[touch]?.insert(i)
                 }
             }
 
@@ -180,6 +208,8 @@ final class StringsStrumsView: UIView {
             touchStartTime.removeValue(forKey: touch)
             touchLastString.removeValue(forKey: touch)
             touchLastY.removeValue(forKey: touch)
+            touchDirection.removeValue(forKey: touch)
+            pluckedStringsInCurrentDirection.removeValue(forKey: touch)
         }
     }
 

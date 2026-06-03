@@ -262,6 +262,9 @@ final class FretboardView: UIView {
 
         // 6. 绘制按弦指示器
         drawPressIndicators(ctx)
+
+        // 7. 绘制品位数字
+        drawFretNumbers(ctx)
     }
 
     private func drawWoodTexture(_ ctx: CGContext) {
@@ -384,6 +387,40 @@ final class FretboardView: UIView {
                 x: x - innerRadius, y: y - innerRadius,
                 width: innerRadius * 2, height: innerRadius * 2
             ))
+        }
+    }
+
+    private func drawFretNumbers(_ ctx: CGContext) {
+        // 放置在 1 弦（最下方的弦）下方
+        let y = stringY(GuitarConstants.stringCount - 1) + 20
+
+        let font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        let textColor = UIColor(white: 0.6, alpha: 0.7)
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        for fret in 1...GuitarConstants.fretCount {
+            let x = fretCenterX(fret)
+            let text = "\(fret)" as NSString
+            let size = text.size(withAttributes: attributes)
+
+            let rect = CGRect(
+                x: x - size.width / 2,
+                y: y,
+                width: size.width,
+                height: size.height
+            )
+
+            UIGraphicsPushContext(ctx)
+            text.draw(in: rect, withAttributes: attributes)
+            UIGraphicsPopContext()
         }
     }
 }
