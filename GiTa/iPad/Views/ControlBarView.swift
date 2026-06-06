@@ -7,6 +7,8 @@ struct ControlBarView: View {
     @Binding var reverbAmount: Float
     @Binding var guitarType: GuitarType
     @Binding var isMIDIModeEnabled: Bool
+    @Binding var metronomeIsPlaying: Bool
+    @Binding var metronomeBPM: Double
     let loudness: Float // 实时声音响度
 
     var body: some View {
@@ -41,6 +43,13 @@ struct ControlBarView: View {
                 
             // MIDI 联动切换
             midiModeToggle
+
+            Divider()
+                .frame(height: 30)
+                .overlay(Color.white.opacity(0.15))
+
+            // 节拍器
+            metronomeControl
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
@@ -180,5 +189,45 @@ struct ControlBarView: View {
             .shadow(color: isMIDIModeEnabled ? .purple.opacity(0.5) : .clear, radius: 8, y: 2)
         }
         .buttonStyle(.plain)
+    }
+    
+    private var metronomeControl: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation { metronomeIsPlaying.toggle() }
+            } label: {
+                Image(systemName: metronomeIsPlaying ? "metronome.fill" : "metronome")
+                    .font(.system(size: 16))
+                    .foregroundColor(metronomeIsPlaying ? .cyan : .white.opacity(0.7))
+                    .frame(width: 24)
+            }
+            .buttonStyle(.plain)
+            
+            Text("\(Int(metronomeBPM))")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 26)
+            
+            HStack(spacing: 4) {
+                ForEach([60, 120, 180], id: \.self) { bpm in
+                    Button {
+                        withAnimation { metronomeBPM = Double(bpm) }
+                    } label: {
+                        Text("\(bpm)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(metronomeBPM == Double(bpm) ? Color.cyan.opacity(0.3) : Color.white.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .foregroundColor(metronomeBPM == Double(bpm) ? .cyan : .white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            Slider(value: $metronomeBPM, in: 40...240, step: 1)
+                .tint(.cyan)
+                .frame(width: 80)
+        }
     }
 }

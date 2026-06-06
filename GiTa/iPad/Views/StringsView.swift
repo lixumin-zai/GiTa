@@ -96,8 +96,8 @@ final class StringsStrumsView: UIView {
 
     /// 弦的 Y 坐标
     private func stringY(_ index: Int) -> CGFloat {
-        let topMargin: CGFloat = 220
-        let bottomMargin: CGFloat = 220
+        let topMargin: CGFloat = 240
+        let bottomMargin: CGFloat = 240
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         return topMargin + CGFloat(index) * spacing
@@ -105,8 +105,8 @@ final class StringsStrumsView: UIView {
 
     /// 根据 Y 坐标找到最近的弦
     private func nearestString(for y: CGFloat) -> Int {
-        let topMargin: CGFloat = 220
-        let bottomMargin: CGFloat = 220
+        let topMargin: CGFloat = 240
+        let bottomMargin: CGFloat = 240
         let usableHeight = bounds.height - topMargin - bottomMargin
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         var index = Int(round((y - topMargin) / spacing))
@@ -120,8 +120,8 @@ final class StringsStrumsView: UIView {
         for touch in touches {
             let pos = touch.location(in: self)
             
-            let topMargin: CGFloat = 220
-            let bottomMargin: CGFloat = 220
+            let topMargin: CGFloat = 240
+            let bottomMargin: CGFloat = 240
             
             // 🚀 判断是否在琴弦区之外的留白（留 40pt 余量给第1/6弦防误触）
             if pos.y < topMargin - 60 || pos.y > bounds.height - bottomMargin + 40 {
@@ -135,9 +135,13 @@ final class StringsStrumsView: UIView {
             touchLastY[touch] = pos.y
             touchDirection[touch] = nil
 
-            // 立即触发当前触摸位置最近弦的拨片
-            triggerPluck(string)
-            pluckedStringsInCurrentDirection[touch] = [string]
+            // 必须真实碰到弦才发声
+            if abs(pos.y - stringY(string)) <= 30 {
+                triggerPluck(string)
+                pluckedStringsInCurrentDirection[touch] = [string]
+            } else {
+                pluckedStringsInCurrentDirection[touch] = []
+            }
         }
     }
 
@@ -194,15 +198,8 @@ final class StringsStrumsView: UIView {
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
-            // 检查是否是扫弦（跨越了多根弦）
-            if let startString = touchStartString[touch],
-               let lastString = touchLastString[touch],
-               let startTime = touchStartTime[touch],
-               startString != lastString {
-                let duration = touch.timestamp - startTime
-                let velocity = Double(abs(lastString - startString)) / max(duration, 0.01)
-                onStrum?(startString, lastString, velocity)
-            }
+            // 注意：我们已经在 touchesMoved 中通过物理坐标的跨越实现了实时、真实的拨弦/扫弦，
+            // 所以这里不再触发 onStrum，否则会导致手指离开时播放鬼影音符（重复发声）。
 
             touchStartString.removeValue(forKey: touch)
             touchStartTime.removeValue(forKey: touch)

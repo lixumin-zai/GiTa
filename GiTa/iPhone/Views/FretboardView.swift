@@ -116,7 +116,9 @@ final class FretboardView: UIView {
         let usableHeight = (bounds.height - topMargin - bottomMargin) * fretboardScale
         let yStart = topMargin + (bounds.height - topMargin - bottomMargin) * (1 - fretboardScale) / 2
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
-        return yStart + CGFloat(index) * spacing
+        // 将弦的顺序翻转，使 6 弦(index=0) 位于最下方
+        let invertedIndex = GuitarConstants.stringCount - 1 - index
+        return yStart + CGFloat(invertedIndex) * spacing
     }
 
     /// 品丝的 X 坐标
@@ -154,6 +156,8 @@ final class FretboardView: UIView {
         let spacing = usableHeight / CGFloat(GuitarConstants.stringCount - 1)
         var stringIndex = Int(round((point.y - yStart) / spacing))
         stringIndex = max(0, min(stringIndex, GuitarConstants.stringCount - 1))
+        // 翻转 index 与 stringY 的改动相匹配
+        stringIndex = GuitarConstants.stringCount - 1 - stringIndex
 
         // 品：按 X 坐标找品位
         let leftMargin: CGFloat = 70
@@ -391,8 +395,8 @@ final class FretboardView: UIView {
     }
 
     private func drawFretNumbers(_ ctx: CGContext) {
-        // 放置在 1 弦（最下方的弦）下方
-        let y = stringY(GuitarConstants.stringCount - 1) + 20
+        // 放置在最下方（现在 6 弦/index=0 位于最下方）
+        let y = stringY(0) + 20
 
         let font = UIFont.systemFont(ofSize: 12, weight: .bold)
         let textColor = UIColor(white: 0.6, alpha: 0.7)

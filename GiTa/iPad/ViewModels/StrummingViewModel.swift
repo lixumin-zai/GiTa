@@ -51,9 +51,20 @@ final class StrummingViewModel {
     /// 实时声音响度 (0.0 ~ 1.0)
     var loudness: Float = 0.0
 
+    /// 节拍器状态
+    var metronomeIsPlaying: Bool {
+        get { metronome.isPlaying }
+        set { metronome.isPlaying = newValue }
+    }
+    var metronomeBPM: Double {
+        get { metronome.bpm }
+        set { metronome.bpm = newValue }
+    }
+
     // MARK: - 私有
 
     let audioEngine = GuitarAudioEngine()
+    let metronome = MetronomeEngine()
     private let browser = ServiceBrowser()
     private let connection = PeerConnection()
     private var lastSequence: UInt16 = 0
