@@ -33,9 +33,35 @@
 - **对称式多点扫拂手势（Y-Axis Strumming）**：扫弦判定轴由 X 轴完全重构至 **Y 轴**。手指纵向滑拂时，利用物理切线相交检测算法（区间 $[\min(y_{\text{last}}, y_{\text{curr}}), \max(y_{\text{last}}, y_{\text{curr}})]$），瞬间捕捉划弦物理截面并触发声音。
 - **极奢悬浮 ZStack 卡片**：
   - **左上角网络状态卡**：在未连接时，其正下方自动展开可用设备列表（iPhone 广播的 Bonjour 指板），支持一键点击秒连。
-  - **右上角实时和弦参考图**：自动捕获并分析 iPhone 发来的按弦格位，回显精细的和弦格子及手指位。
-  - **中底效果功放控制栏**：内嵌 Volume、Reverb（混响）调节与 Acoustic（木吉他）、Electric（电吉他）、Classical（古典吉他）效果链预设。
-  - **Bezel 避让与物理边缘留白**：琴弦设置了 **`200pt`** 奢华的上下物理留白，卡片设置了 **`40pt (水平) / 36pt (顶底)`** 边距，完全内缩避开 iPad 物理圆角边框裁切。
+  - **右上角实时和弦参考图 + 智能和弦识别**：自动捕获并分析 iPhone 发来的按弦格位，回显精细的和弦格子、手指位及**每一品的品位号**。内置约 40 种常见和弦指法数据库（大三/小三/七和弦/挂留/横按/加音等），当按出匹配的指法时，自动高亮显示和弦名称（如 **D**、**Am**、**G7** 等）。
+  - **中底分组浮岛控制栏**：采用分组毛玻璃胶囊浮岛设计，各功能区（音量+响度、混响+吉他类型、节拍器、MIDI）独立分组，内嵌 Volume、Reverb（混响）调节与 Acoustic（木吉他）、Electric（电吉他）、Classical（古典吉他）效果链预设。
+  - **Bezel 避让与物理边缘留白**：琴弦设置了 **`235pt`** 奢华的上下物理留白（统一常量，一处修改全局生效），卡片设置了 **`40pt (水平) / 36pt (顶底)`** 边距，完全内缩避开 iPad 物理圆角边框裁切。
+
+---
+
+## 🎵 智能辅助功能 (Smart Features)
+
+### 🎼 内置节拍器 (Metronome)
+- **原生 `AVAudioSourceNode` 实时合成**：节拍器音频完全由 CPU 实时生成（1500Hz 指数衰减脉冲），无需额外音频文件，极致轻量。
+- **快速预设 + 精细调节**：提供 **60 / 120 / 180 BPM** 一键快速切换按钮，同时支持 **40 ~ 240 BPM** 范围的滑动条无级调速。
+- **独立音频引擎**：节拍器拥有独立的 `AVAudioEngine` 实例，与吉他音色引擎完全隔离，互不干扰。
+
+### 🎸 智能和弦识别 (Chord Recognition)
+- **约 40 种常见和弦指法库**：覆盖开放大三和弦（C、D、E、G、A、F）、小三和弦（Am、Dm、Em）、七和弦、小七、大七、挂留、横按、增减和弦及加音和弦等。
+- **实时精确匹配**：每次 iPhone 按弦状态变化时，iPad 端立即进行指法比对，匹配成功则高亮显示和弦名称。
+
+### 📐 品位标注与琴弦对齐
+- **iPhone 指板品位数字标记**：在指板底部标注 1~19 品数字，方便快速定位。
+- **iPad 和弦图品位标注**：和弦图每一品的左侧均标注品位号，直观清晰。
+- **双端琴弦镜像对齐**：iPhone 端琴弦顺序经过镜像翻转，6 弦（最粗）始终位于最下方，与 iPad 端视角完全一致。
+
+### 🔒 屏幕常亮 (Always-On Display)
+- App 启动时自动禁用系统自动锁屏（`isIdleTimerDisabled = true`），确保练琴过程中屏幕不会突然熄灭。
+
+### 🎯 精准拨弦触控
+- **物理碰弦判定**：手指必须落在琴弦中心 **30pt** 范围内才会触发发声，杜绝两弦之间的误触。
+- **防重复鬼影音符**：移除了 `touchesEnded` 中的冗余扫弦逻辑，抬手时不再产生多余的重复发声。
+- **往复颤音扫弦**：支持手指快速上下往复扫弦，自动检测方向变化并重置已拨弦记录。
 
 ---
 
@@ -96,14 +122,15 @@ GiTa/
 │       │   ├── StrummingScreen.swift    # 平板主屏幕 (横屏 ZStack 极奢悬浮面板)
 │       │   ├── StringsView.swift        # 水平琴弦 UIKit 多点触控 (Y轴物理扫弦)
 │       │   ├── StringsViewRepresentable.swift
-│       │   ├── ChordDiagramView.swift   # glassmorphic 悬浮和弦指法回显
+│       │   ├── ChordDiagramView.swift   # 和弦指法回显 + 品位标注 + 智能和弦识别
 │       │   ├── SoundHoleView.swift      # 古典玫瑰木圆形呼吸音孔
-│       │   └── ControlBarView.swift     # 悬浮功放控制条与 8-Bar 响度波形条
+│       │   └── ControlBarView.swift     # 分组浮岛控制栏 (音量/混响/节拍器/MIDI)
 │       ├── ViewModels/
-│       │   └── StrummingViewModel.swift  # 20Hz 响度轮询与主动握手断开管理
+│       │   └── StrummingViewModel.swift  # 20Hz 响度轮询、节拍器集成与主动握手断开管理
 │       └── Audio/
 │           ├── StringSynthesizer.swift  # Karplus-Strong 物理合成 (零Modulo, FTZ)
-│           ├── GuitarAudioEngine.swift  # 6声道混音、IIR 响度提取与效果链
+│           ├── GuitarAudioEngine.swift  # 6声道 SoundFont 采样、IIR 响度提取与效果链
+│           ├── MetronomeEngine.swift    # 独立 AVAudioEngine 节拍器 (实时合成脉冲)
 │           └── EffectsChain.swift       # 混响、3段 EQ 与吉他预设效果链
 ```
 

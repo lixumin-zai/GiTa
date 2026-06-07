@@ -9,6 +9,15 @@ struct FretboardScreen: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
+                // 彻底屏蔽系统音量 HUD 并拦截按键的终极方案：
+                // 使用 SwiftUI 的 UIViewRepresentable 容器确保 MPVolumeView 正确加载到激活的视图树。
+                // 通过将其放置在 ZStack 的最底部（首位渲染），让上层完全不透明的指板遮盖，实现“物理隐形但逻辑活跃”。
+                HiddenVolumeView { volumeView in
+                    viewModel.registerVolumeView(volumeView)
+                }
+                .frame(width: 100, height: 30)
+                .opacity(0.01) // 保持极微弱透明度避免被 iOS 引擎禁用，实际已被指板完全遮挡
+                
                 // 指板（全屏）
                 FretboardRepresentable(viewModel: viewModel)
                     .ignoresSafeArea()
@@ -176,4 +185,19 @@ private struct FretInfoOverlay: View {
             .transition(.opacity)
         }
     }
+}
+
+// MARK: - HiddenVolumeView Wrapper
+import MediaPlayer
+
+struct HiddenVolumeView: UIViewRepresentable {
+    let onVolumeViewCreated: (MPVolumeView) -> Void
+    
+    func makeUIView(context: Context) -> MPVolumeView {
+        let volumeView = MPVolumeView(frame: CGRect(x: 0, y: 0, width: 100, height: 30))
+        onVolumeViewCreated(volumeView)
+        return volumeView
+    }
+    
+    func updateUIView(_ uiView: MPVolumeView, context: Context) {}
 }

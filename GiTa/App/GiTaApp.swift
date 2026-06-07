@@ -18,6 +18,10 @@ struct GiTaApp: App {
                 }
             }
             .preferredColorScheme(.dark)
+            .onAppear {
+                // 练琴时保持屏幕常亮，防止自动熄屏
+                UIApplication.shared.isIdleTimerDisabled = true
+            }
         }
     }
 }

@@ -25,7 +25,7 @@ final class FretboardViewModel {
     var scale: Double = 1.0
 
     /// 指板横向品距拉伸倍率 (1.0 ~ 3.0)
-    var widthMultiplier: Double = 1.5 // 默认 1.5 倍拉宽
+    var widthMultiplier: Double = 2.2 // 默认 2.2 倍拉宽（品丝间隔更大）
 
     /// 指板横向滚动偏移量
     var offsetX: Double = 0.0
@@ -108,20 +108,23 @@ final class FretboardViewModel {
 
     private func setupVolumeObserver() {
         volumeObserver.onVolumeUp = { [weak self] in
-            // 带有动画的向右平移（滑向高把位）
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                self?.panRight()
-            }
-        }
-        
-        volumeObserver.onVolumeDown = { [weak self] in
-            // 带有动画的向左平移（滑向琴枕）
+            // 带有动画的向左平移（滑向琴枕 / 低把位）
             withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                 self?.panLeft()
             }
         }
         
-        volumeObserver.start()
+        volumeObserver.onVolumeDown = { [weak self] in
+            // 带有动画的向右平移（滑向高把位）
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                self?.panRight()
+            }
+        }
+    }
+    
+    /// 当 SwiftUI 视图挂载好 MPVolumeView 后注册进来启动监听
+    func registerVolumeView(_ volumeView: MPVolumeView) {
+        volumeObserver.start(with: volumeView)
     }
     
     private func panRight() {
@@ -276,26 +279,24 @@ final class FretboardViewModel {
 
 /// 极客魔法：拦截硬件音量键进行自定义操作
 final class VolumeKeyObserver {
-    private var volumeView: MPVolumeView!
+    private var volumeView: MPVolumeView?
     private var observer: NSKeyValueObservation?
     private let targetVolume: Float = 0.5 // 固定将系统音量维持在 50%，防止按到极限值失效
+    private var isResetting: Bool = false
     
     var onVolumeUp: (() -> Void)?
     var onVolumeDown: (() -> Void)?
     
-    func start() {
+    func start(with volumeView: MPVolumeView) {
+        self.volumeView = volumeView
+        
         let audioSession = AVAudioSession.sharedInstance()
+        try? audioSession.setCategory(.playback, options: .mixWithOthers)
         try? audioSession.setActive(true)
         
-        volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
-        volumeView.isHidden = false 
-        
-        DispatchQueue.main.async {
-            if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
-               let window = windowScene.windows.first(where: { $0.isKeyWindow }) {
-                window.addSubview(self.volumeView)
-            }
-            self.resetSystemVolume()
+        // 延迟重置，确保 SwiftUI 渲染完成且 Slider 子控件完全加载
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.resetSystemVolume()
         }
         
         observer = audioSession.observe(\.outputVolume, options: [.old, .new]) { [weak self] (session, change) in
@@ -303,31 +304,62 @@ final class VolumeKeyObserver {
                   let newVol = change.newValue,
                   let oldVol = change.oldValue else { return }
             
-            if abs(newVol - self.targetVolume) < 0.05 { return }
-            
-            if newVol > oldVol {
-                DispatchQueue.main.async { self.onVolumeUp?() }
-            } else if newVol < oldVol {
-                DispatchQueue.main.async { self.onVolumeDown?() }
+            // 过滤代码重置触发的 KVO
+            if self.isResetting {
+                if abs(newVol - self.targetVolume) < 0.05 {
+                    self.isResetting = false
+                    return
+                }
+                self.isResetting = false
             }
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.resetSystemVolume()
+            DispatchQueue.main.async {
+                if newVol > oldVol {
+                    self.onVolumeUp?()
+                } else if newVol < oldVol {
+                    self.onVolumeDown?()
+                }
+            }
+            
+            // 稍微延迟重置，确保物理按键的系统回调连续性不被吃掉
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+                self?.resetSystemVolume()
             }
         }
     }
-    
     func stop() {
         observer?.invalidate()
         observer = nil
-        DispatchQueue.main.async {
-            self.volumeView?.removeFromSuperview()
-        }
+        volumeView = nil
     }
     
     private func resetSystemVolume() {
-        if let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first {
-            slider.value = targetVolume
+        guard let volumeView = volumeView else { return }
+        if let slider = volumeView.findSliderRecursively() {
+            if abs(slider.value - targetVolume) > 0.02 {
+                isResetting = true
+                slider.value = targetVolume
+                
+                // 防御性超时：防止因为某种原因 KVO 没回调导致永久卡死
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    self?.isResetting = false
+                }
+            }
         }
+    }
+}
+
+// MARK: - UIView Extension for finding Slider
+private extension UIView {
+    func findSliderRecursively() -> UISlider? {
+        if let slider = self as? UISlider {
+            return slider
+        }
+        for subview in subviews {
+            if let slider = subview.findSliderRecursively() {
+                return slider
+            }
+        }
+        return nil
     }
 }
